@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WhatsFloat from "@/components/WhatsFloat";
 import ToastHost from "@/components/Toast";
+import OrganizationJsonLd from "@/components/OrganizationJsonLd";
 import { getSiteConfig } from "@/lib/site-config";
 
 export default async function SiteLayout({
@@ -13,6 +14,7 @@ export default async function SiteLayout({
 
   return (
     <>
+      <OrganizationJsonLd name={site.name} instagram={site.instagram} />
       <Header />
       <main>{children}</main>
       <Footer whatsapp={site.whatsapp} whatsappDisplay={site.whatsappDisplay} instagram={site.instagram} instagramHandle={site.instagramHandle} />
