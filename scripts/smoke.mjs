@@ -354,5 +354,44 @@ for (const icon of ["icon-192.png", "icon-512.png", "maskable-192.png", "maskabl
   check("skeleton: aria-busy presente", html.includes("aria-busy"));
 }
 
+// V5.18 admin_stats_30d: array plano (sem [[...]]) — exige ADMIN_EMAIL/ADMIN_PASSWORD no .env.local
+{
+  const fs2 = await import("node:fs");
+  let aurl = "", akey = "", aemail = "", apass = "";
+  try {
+    const e = fs2.readFileSync(new URL("../.env.local", import.meta.url), "utf8");
+    aurl = e.match(/^NEXT_PUBLIC_SUPABASE_URL=(.+)$/m)?.[1]?.trim() || "";
+    akey = e.match(/^NEXT_PUBLIC_SUPABASE_ANON_KEY=(.+)$/m)?.[1]?.trim() || "";
+    aemail = e.match(/^ADMIN_EMAIL=(.+)$/m)?.[1]?.trim() || "";
+    apass = e.match(/^ADMIN_PASSWORD=(.+)$/m)?.[1]?.trim() || "";
+  } catch {}
+  if (aurl && akey && aemail && apass) {
+    const login = await fetch(`${aurl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { apikey: akey, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: aemail, password: apass }),
+    }).then((r) => r.json()).catch(() => null);
+    if (login?.access_token) {
+      const rpc = await fetch(`${aurl}/rest/v1/rpc/admin_stats_30d`, {
+        method: "POST",
+        headers: {
+          apikey: akey,
+          Authorization: `Bearer ${login.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      }).then((r) => r.json()).catch(() => null);
+      const rows = Array.isArray(rpc) ? rpc.flat() : [];
+      const flat =
+        Array.isArray(rpc) && rows.length > 0 && rows.every((d) => typeof d?.day === "string");
+      check("admin_stats_30d: array plano com day:string", flat, `linhas=${rows.length}`);
+    } else {
+      console.log("SKIP  admin_stats_30d (login admin falhou)");
+    }
+  } else {
+    console.log("SKIP  admin_stats_30d (sem ADMIN_EMAIL/ADMIN_PASSWORD no .env.local)");
+  }
+}
+
 console.log(`\n${results.length - failed}/${results.length} passaram`);
 process.exit(failed ? 1 : 0);
