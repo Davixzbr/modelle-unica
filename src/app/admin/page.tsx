@@ -50,7 +50,12 @@ export default async function AdminDashboard() {
   const products = (prodRes.data as unknown as Product[]) || [];
   const events = evRes.data || [];
   const zeroVariants = (varRes.data as unknown as ZeroVariant[]) || [];
-  const stats = (statsRes.data as unknown as StatsRow[]) || [];
+  // RPC retorna array de linhas; normaliza contra formato legado [[...]]
+  // (setof json) e descarta linhas sem "day" — evita crash no render.
+  const statsRaw = Array.isArray(statsRes.data) ? statsRes.data : [];
+  const stats = (statsRaw as unknown[]).flat().filter(
+    (r): r is StatsRow => !!r && typeof (r as StatsRow).day === "string"
+  );
 
   return (
     <>

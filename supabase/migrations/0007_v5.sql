@@ -57,8 +57,11 @@ end $$;
 grant execute on function public.products_with_stock(text, boolean, int, text) to anon, authenticated;
 
 -- 4) Estatísticas 30d p/ dashboard (views e wa_order por dia + comparativo)
+--    returns JSON (não setof): setof json com SELECT agregado embrulhava
+--    o array em [[ ... ]] e quebrava o .map() do gráfico no servidor.
+drop function if exists public.admin_stats_30d();
 create or replace function public.admin_stats_30d()
-returns setof json
+returns json
 language sql
 stable
 security definer
