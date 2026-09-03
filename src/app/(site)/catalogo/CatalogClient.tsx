@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
+import Swatch from "@/components/Swatch";
 import { EmptyState } from "@/components/States";
 import Icon from "@/components/Icon";
 import { logEvent } from "@/lib/analytics";
@@ -220,6 +221,7 @@ export default function CatalogClient({
           value={f.color}
           onChange={(v) => patch({ color: v })}
           allLabel="Todas"
+          withSwatch
         />
       </Group>
       <Group title="Preço">
@@ -495,11 +497,13 @@ function ChoiceRow({
   value,
   onChange,
   allLabel,
+  withSwatch = false,
 }: {
   options: { value: string; label: string }[];
   value: string;
   onChange: (v: string) => void;
   allLabel: string;
+  withSwatch?: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -508,6 +512,11 @@ function ChoiceRow({
       </Chip>
       {options.map((o) => (
         <Chip key={o.value} on={value === o.value} onClick={() => onChange(o.value)}>
+          {withSwatch && (
+            <>
+              <Swatch name={o.label} className="mr-1.5 -mb-0.5" />
+            </>
+          )}
           {o.label}
         </Chip>
       ))}

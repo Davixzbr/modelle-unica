@@ -14,6 +14,26 @@ const TAG_LABEL: Record<string, string> = {
   exclusivo: "Exclusivo",
 };
 
+/** Badges dinâmicos do card — máx 2, prioridade Últimas peças > Novidade > Promo. */
+export function cardBadges(p: {
+  total_stock: number;
+  is_new: boolean;
+  promo_price: number | null;
+  price: number;
+}): { label: string; tone: "wine" | "ink" | "gold" }[] {
+  const badges: { label: string; tone: "wine" | "ink" | "gold" }[] = [];
+  if (p.total_stock > 0 && p.total_stock <= 3) badges.push({ label: "Últimas peças", tone: "wine" });
+  if (p.is_new) badges.push({ label: "Novidade", tone: "ink" });
+  if (p.promo_price != null && p.promo_price < p.price) badges.push({ label: "Promo", tone: "gold" });
+  return badges.slice(0, 2);
+}
+
+const BADGE_TONE: Record<"wine" | "ink" | "gold", string> = {
+  wine: "bg-cream/95 text-wine",
+  ink: "bg-cream/95 text-ink",
+  gold: "bg-gold-soft text-gold-deep",
+};
+
 export function StockBadge({ stock, low }: { stock: number; low: number }) {
   if (stock <= 0)
     return (
@@ -78,6 +98,7 @@ export default function ProductCard({ p, lowStock = 2 }: { p: Product; lowStock?
   const hoverImage = p.images.length > 1 ? p.images[1] : null;
   const [hover, setHover] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const badges = cardBadges(p);
 
   return (
     <Link
@@ -103,21 +124,23 @@ export default function ProductCard({ p, lowStock = 2 }: { p: Product; lowStock?
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           className={`object-cover transition-opacity duration-300 ${hover && hoverImage ? "opacity-100" : "opacity-100"}`}
         />
-        {p.is_new && (
-          <span className="absolute left-3 top-3 rounded-full bg-cream/95 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink">
-            Novo
-          </span>
-        )}
-        {!p.is_new && p.tags.includes("exclusivo") && (
-          <span className="absolute left-3 top-3 rounded-full bg-cream/95 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-gold-deep">
-            Exclusivo
-          </span>
-        )}
+        <div className="absolute left-3 top-3 flex max-w-[calc(100%-76px)] flex-col items-start gap-1.5">
+          {badges.map((b) => (
+            <span
+              key={b.label}
+              className={`rounded-full px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] ${BADGE_TONE[b.tone]}`}
+            >
+              {b.label}
+            </span>
+          ))}
+          {!badges.some((b) => b.label === "Novidade") && p.tags.includes("exclusivo") && (
+            <span className="rounded-full bg-cream/95 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-gold-deep">
+              Exclusivo
+            </span>
+          )}
+        </div>
         <div className="absolute right-3 top-3">
           <FavoriteButton product={p} size="sm" />
-        </div>
-        <div className="absolute bottom-3 left-3">
-          <StockBadge stock={total} low={lowStock} />
         </div>
         {soldOut && (
           <div className="absolute inset-0 grid place-items-center bg-cream/40">

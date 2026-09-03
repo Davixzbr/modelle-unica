@@ -10,6 +10,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useCart } from "@/hooks/useCart";
 import Icon from "@/components/Icon";
 import { toast } from "@/components/Toast";
+import Swatch from "@/components/Swatch";
 import type { Product, Variant } from "@/lib/types";
 
 type Props = {
@@ -371,6 +372,7 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
                             : "border-line bg-paper text-ink hover:border-ink"
                       }`}
                     >
+                      <Swatch name={c} className="mr-2 -mb-0.5" />
                       {c}
                     </button>
                   );
