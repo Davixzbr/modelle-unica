@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import Icon from "@/components/Icon";
 import type { Product } from "@/lib/types";
+import type { ZeroVariant } from "./page";
 
 type EvRow = { type: string; product_id: string | null; created_at: string };
 
@@ -17,10 +18,12 @@ export default function DashboardClient({
   products,
   events,
   lowStock,
+  zeroVariants = [],
 }: {
   products: Product[];
   events: EvRow[];
   lowStock: number;
+  zeroVariants?: ZeroVariant[];
 }) {
   const [days, setDays] = useState<number>(7);
 
@@ -146,6 +149,64 @@ export default function DashboardClient({
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
+        {/* Estoque baixo com drill-down de variantes */}
+        <section className="a-card">
+          <div className="a-cardtitle">
+            Estoque baixo
+            <span className="hint">{lowList.length + outList.length} produto(s)</span>
+          </div>
+          {lowList.length + outList.length === 0 ? (
+            <p className="text-[13px] text-[color:var(--a-muted)] py-3">
+              Nenhum produto em estoque baixo. ✓
+            </p>
+          ) : (
+            <table className="a-table">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th className="!text-right">Total</th>
+                  <th>Variantes zeradas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...outList, ...lowList].map((p) => {
+                  const zeros = zeroVariants.filter(
+                    (v) => v.product_id === p.id && v.products?.status === "active"
+                  );
+                  return (
+                    <tr key={p.id}>
+                      <td className="a-cellmain">
+                        <Link href={`/admin/produtos/${p.id}`} className="hover:underline">
+                          {p.name}
+                        </Link>
+                      </td>
+                      <td className="text-right tabular-nums font-semibold">
+                        {p.total_stock ?? 0}
+                      </td>
+                      <td>
+                        {zeros.length === 0 ? (
+                          <span className="text-[color:var(--a-muted)]">—</span>
+                        ) : (
+                          <span className="flex flex-wrap gap-1">
+                            {zeros.map((v) => (
+                              <span
+                                key={v.id}
+                                className="rounded-full bg-[color:var(--a-bg)] px-2 py-0.5 text-[11px] text-[color:var(--a-muted)]"
+                              >
+                                {[v.size, v.color].filter(Boolean).join(" / ") || "peça única"}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
+
         {/* Atenção necessária */}
         <section className="a-card">
           <div className="a-cardtitle">
