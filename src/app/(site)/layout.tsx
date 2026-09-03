@@ -15,7 +15,7 @@ export default async function SiteLayout({
     <>
       <Header />
       <main>{children}</main>
-      <Footer whatsapp={site.whatsapp} />
+      <Footer whatsapp={site.whatsapp} whatsappDisplay={site.whatsappDisplay} instagram={site.instagram} instagramHandle={site.instagramHandle} />
       <WhatsFloat
         number={site.whatsapp}
         message={`Olá, ${site.name}! Vim pelo site e gostaria de mais informações.`}

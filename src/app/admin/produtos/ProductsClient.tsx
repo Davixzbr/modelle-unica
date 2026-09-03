@@ -1,286 +1,454 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
-import { brl } from "@/lib/format";
+import Icon from "@/components/Icon";
+import ToastHost from "@/components/Toast";
 import { toast } from "@/components/Toast";
-import { Spinner } from "@/components/States";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import type { Product } from "@/lib/types";
+import { brl } from "@/lib/format";
 
 type Row = Product;
 
-const STATUS_BADGE: Record<string, string> = { active: "green", draft: "amber", inactive: "gray" };
-const STATUS_LABEL: Record<string, string> = { active: "Ativo", draft: "Rascunho", inactive: "Inativo" };
-
-export default function ProductsClient({ initial, lowStock }: { initial: Row[]; lowStock: number }) {
+function ActionsMenu({
+  row,
+  onDone,
+  onDuplicate,
+}: {
+  row: Row;
+  onDone: () => void;
+  onDuplicate: (row: Row) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const params = useSearchParams();
-  const [products, setProducts] = useState(initial);
-  const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState(params.get("status") || "");
-  const [stockFilter, setStockFilter] = useState("");
-  const [sort, setSort] = useState("ordem");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Row | null>(null);
 
-  const filtered = useMemo(() => {
-    let list = [...products];
-    if (statusFilter) list = list.filter((p) => p.status === statusFilter);
-    if (stockFilter === "out") list = list.filter((p) => (p.total_stock) <= 0);
-    if (stockFilter === "low")
-      list = list.filter((p) => {
-        const t = p.total_stock;
-        return t > 0 && t <= lowStock;
-      });
-    if (q.trim()) {
-      const n = q.toLowerCase();
-      list = list.filter((p) => p.name.toLowerCase().includes(n));
-    }
-    switch (sort) {
-      case "name":
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case "price_asc":
-        list.sort((a, b) => (a.promo_price ?? a.price) - (b.promo_price ?? b.price));
-        break;
-      case "price_desc":
-        list.sort((a, b) => (b.promo_price ?? b.price) - (a.promo_price ?? a.price));
-        break;
-      case "views":
-        list.sort((a, b) => b.views - a.views);
-        break;
-      default:
-        list.sort((a, b) => a.sort_order - b.sort_order);
-    }
-    return list;
-  }, [products, q, statusFilter, stockFilter, sort, lowStock]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
 
-  async function setStatus(p: Row, status: Product["status"]) {
-    setBusy(p.id);
-    const { error } = await createClient().from("products").update({ status }).eq("id", p.id);
-    setBusy(null);
-    if (error) return toast("Erro ao atualizar status", "err");
-    setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status } : x)));
-    toast(status === "active" ? "Produto ativado" : "Produto pausado");
-  }
-
-  async function duplicate(p: Row) {
-    setBusy(p.id);
+  async function toggleActive() {
+    const next = row.status === "active" ? "inactive" : "active";
     const supabase = createClient();
-    try {
-      const { data: copy, error } = await supabase
-        .from("products")
-        .insert({
-          name: `${p.name} (cópia)`,
-          slug: `${p.slug}-copia-${Date.now().toString(36)}`,
-          description: p.description,
-          short_description: p.short_description,
-          fabric: p.fabric,
-          size_chart: p.size_chart,
-          category_id: p.category_id,
-          collection_id: p.collection_id,
-          price: p.price,
-          promo_price: p.promo_price,
-          main_image: p.main_image,
-          images: p.images,
-          sizes: p.sizes,
-          colors: p.colors,
-          tags: p.tags,
-          featured: false,
-          is_new: p.is_new,
-          status: "draft",
-          sort_order: p.sort_order + 1,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      // Copia variantes
-      const { data: vars } = await supabase
-        .from("variants")
-        .select("size, color, stock")
-        .eq("product_id", p.id);
-      if (vars?.length) {
-        const { error: vErr } = await supabase
-          .from("variants")
-          .insert(vars.map((v) => ({ ...v, product_id: copy.id })));
-        if (vErr) throw vErr;
-      }
-
-      toast("Produto duplicado como rascunho — abrindo para editar…");
-      router.push(`/admin/produtos/${copy.id}`);
-    } catch {
-      toast("Erro ao duplicar produto", "err");
-      setBusy(null);
-    }
-  }
-
-  async function removeConfirmed() {
-    if (!confirmDelete) return;
-    const p = confirmDelete;
-    setBusy(p.id);
-    const { error } = await createClient().from("products").delete().eq("id", p.id);
-    setBusy(null);
-    setConfirmDelete(null);
-    if (error) return toast("Erro ao excluir produto", "err");
-    setProducts((prev) => prev.filter((x) => x.id !== p.id));
-    toast(`"${p.name}" excluído`);
+    const { error } = await supabase.from("products").update({ status: next }).eq("id", row.id);
+    if (error) toast("Não foi possível atualizar o status.", "error");
+    else toast(next === "active" ? "Produto ativado." : "Produto pausado.", "success");
+    setOpen(false);
+    onDone();
+    router.refresh();
   }
 
   return (
+    <div className="relative" ref={ref}>
+      <button
+        className="a-iconbtn"
+        aria-label={`Ações para ${row.name}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="more" size={17} />
+      </button>
+      {open && (
+        <div className="a-menu">
+          <Link href={`/admin/produtos/${row.id}`}>
+            <Icon name="edit" size={15} /> Editar
+          </Link>
+          <Link href={`/produto/${row.slug}`} target="_blank">
+            <Icon name="eye" size={15} /> Visualizar
+          </Link>
+          <button
+            onClick={() => {
+              setOpen(false);
+              onDuplicate(row);
+            }}
+          >
+            <Icon name="copy" size={15} /> Duplicar
+          </button>
+          <div className="sep" />
+          <button onClick={toggleActive}>
+            <Icon name={row.status === "active" ? "pause" : "play"} size={15} />
+            {row.status === "active" ? "Pausar" : "Ativar"}
+          </button>
+          <button
+            className="danger"
+            onClick={() => {
+              setOpen(false);
+              onDoneDelete(row);
+            }}
+          >
+            <Icon name="trash" size={15} /> Excluir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  function onDoneDelete(_row: Row) {
+    // delegado via CustomEvent para o pai abrir o ConfirmDialog
+    window.dispatchEvent(new CustomEvent("mu-delete-product", { detail: row }));
+  }
+}
+
+export default function ProductsClient({
+  initial,
+  lowStock,
+}: {
+  initial: Row[];
+  lowStock: number;
+}) {
+  const [rows, setRows] = useState<Row[]>(initial);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [stockFilter, setStockFilter] = useState("all");
+  const [onlyPromo, setOnlyPromo] = useState(false);
+  const [onlyFeatured, setOnlyFeatured] = useState(false);
+  const [toDelete, setToDelete] = useState<Row | null>(null);
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const handler = (e: Event) => setToDelete((e as CustomEvent).detail as Row);
+    window.addEventListener("mu-delete-product", handler);
+    return () => window.removeEventListener("mu-delete-product", handler);
+  }, []);
+
+  const categories = useMemo(
+    () => [...new Set(rows.map((r) => r.categories?.name).filter(Boolean))].sort(),
+    [rows]
+  );
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (term) {
+        const hay = `${r.name} ${r.slug} ${r.categories?.name || ""} ${(r.tags || []).join(" ")}`.toLowerCase();
+        if (!hay.includes(term)) return false;
+      }
+      if (status !== "all" && r.status !== status) return false;
+      if (category !== "all" && r.categories?.name !== category) return false;
+      const st = r.total_stock ?? 0;
+      if (stockFilter === "out" && st !== 0) return false;
+      if (stockFilter === "low" && !(st > 0 && st <= lowStock)) return false;
+      if (onlyPromo && !r.promo_price) return false;
+      if (onlyFeatured && !r.featured) return false;
+      return true;
+    });
+  }, [rows, q, status, category, stockFilter, onlyPromo, onlyFeatured, lowStock]);
+
+  const hasFilters =
+    q || status !== "all" || category !== "all" || stockFilter !== "all" || onlyPromo || onlyFeatured;
+
+  function stockBadge(r: Row) {
+    const st = r.total_stock ?? 0;
+    if (st === 0) return <span className="a-badge red">Esgotado</span>;
+    if (st <= lowStock) return <span className="a-badge amber">{st} un.</span>;
+    return <span className="a-badge gray">{st} un.</span>;
+  }
+
+  async function duplicate(row: Row) {
+    setBusy(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("duplicate_product", { p_id: row.id });
+    if (error || !data) {
+      // fallback: copia básica sem variantes
+      const { id: _id, created_at: _c, updated_at: _u, ...rest } = row;
+      const copy = {
+        ...rest,
+        name: `${row.name} (cópia)`,
+        slug: `${row.slug}-copia-${Date.now().toString(36).slice(-4)}`,
+        status: "draft",
+        views: 0,
+        favorites_count: 0,
+      };
+      const { data: created, error: err2 } = await supabase
+        .from("products")
+        .insert(copy)
+        .select("id")
+        .single();
+      if (err2 || !created) toast("Não foi possível duplicar o produto.", "error");
+      else {
+        toast("Produto duplicado (sem variantes) — ajuste o estoque.", "warn");
+        router.refresh();
+      }
+    } else {
+      toast("Produto duplicado com variantes.", "success");
+      router.refresh();
+    }
+    setBusy(false);
+  }
+
+  async function confirmDelete() {
+    if (!toDelete) return;
+    setBusy(true);
+    const supabase = createClient();
+    const { error } = await supabase.from("products").delete().eq("id", toDelete.id);
+    if (error) toast("Não foi possível excluir o produto.", "error");
+    else {
+      toast("Produto excluído.", "success");
+      setRows((rs) => rs.filter((r) => r.id !== toDelete.id));
+      router.refresh();
+    }
+    setToDelete(null);
+    setBusy(false);
+  }
+
+  const rowActions = (r: Row) => (
+    <ActionsMenu row={r} onDone={() => router.refresh()} onDuplicate={duplicate} />
+  );
+
+  return (
     <>
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl">Produtos</h1>
-        <div className="ml-auto flex flex-wrap items-center gap-3">
+      <ToastHost />
+
+      <div className="a-toolbar">
+        <div className="search">
+          <Icon name="search" size={15} />
           <input
-            type="search"
+            placeholder="Buscar por nome, slug, categoria ou tag…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar produto…"
-            style={{ width: 200 }}
-            aria-label="Buscar produto"
+            aria-label="Buscar produtos"
           />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ width: 140 }} aria-label="Filtrar por status">
-            <option value="">Todos os status</option>
-            <option value="active">Ativos</option>
-            <option value="draft">Rascunhos</option>
-            <option value="inactive">Inativos</option>
-          </select>
-          <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} style={{ width: 150 }} aria-label="Filtrar por estoque">
-            <option value="">Todo o estoque</option>
-            <option value="low">Estoque baixo</option>
-            <option value="out">Esgotados</option>
-          </select>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ width: 150 }} aria-label="Ordenar">
-            <option value="ordem">Ordem manual</option>
-            <option value="name">Nome A–Z</option>
-            <option value="price_asc">Menor preço</option>
-            <option value="price_desc">Maior preço</option>
-            <option value="views">Mais vistos</option>
-          </select>
-          <Link href="/admin/produtos/novo" className="a-btn">+ Novo</Link>
         </div>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+          <option value="all">Todos os status</option>
+          <option value="active">Ativos</option>
+          <option value="inactive">Pausados</option>
+          <option value="draft">Rascunhos</option>
+        </select>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Categoria">
+          <option value="all">Todas as categorias</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={stockFilter}
+          onChange={(e) => setStockFilter(e.target.value)}
+          aria-label="Estoque"
+        >
+          <option value="all">Todo o estoque</option>
+          <option value="low">Estoque baixo</option>
+          <option value="out">Esgotados</option>
+        </select>
+        <button className={`a-chip ${onlyPromo ? "on" : ""}`} onClick={() => setOnlyPromo((v) => !v)}>
+          Em promoção
+        </button>
+        <button
+          className={`a-chip ${onlyFeatured ? "on" : ""}`}
+          onClick={() => setOnlyFeatured((v) => !v)}
+        >
+          Destaques
+        </button>
+        {hasFilters && (
+          <button
+            className="a-chip"
+            onClick={() => {
+              setQ("");
+              setStatus("all");
+              setCategory("all");
+              setStockFilter("all");
+              setOnlyPromo(false);
+              setOnlyFeatured(false);
+            }}
+          >
+            <Icon name="x" size={13} /> Limpar
+          </button>
+        )}
+        <Link href="/admin/produtos/novo" className="a-btn sm ml-auto">
+          <Icon name="plus" size={14} /> Novo produto
+        </Link>
       </div>
 
-      <table className="a-table">
-        <thead>
-          <tr>
-            <th style={{ width: 60 }}>Foto</th>
-            <th>Produto</th>
-            <th>Preço</th>
-            <th>Estoque</th>
-            <th>Status</th>
-            <th style={{ width: 280 }}>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((p) => {
-            const total = p.total_stock;
-            return (
-              <tr key={p.id}>
-                <td>
-                  <div className="relative h-12 w-10 overflow-hidden rounded bg-gray-100">
-                    <Image src={p.main_image || p.images[0] || "/images/look-001.jpg"} alt="" fill sizes="40px" className="object-cover" />
-                  </div>
-                </td>
-                <td>
-                  <Link href={`/admin/produtos/${p.id}`} className="font-medium hover:underline">
-                    {p.name}
-                  </Link>
-                  <p className="text-xs text-gray-500">
-                    {p.sizes.join(", ")} · {p.colors.join(", ")}
-                    {p.featured ? " · ★ destaque" : ""}
-                  </p>
-                </td>
-                <td className="whitespace-nowrap">
-                  {p.promo_price != null ? (
-                    <>
-                      <span className="font-medium">{brl(p.promo_price)}</span>{" "}
-                      <span className="text-xs text-gray-400 line-through">{brl(p.price)}</span>
-                    </>
-                  ) : (
-                    brl(p.price)
-                  )}
-                </td>
-                <td>
-                  <span className={`a-badge ${total <= 0 ? "red" : total <= lowStock ? "amber" : "gray"}`}>
-                    {total <= 0 ? "Esgotado" : total <= lowStock ? `${total} un. (baixo)` : `${total} un.`}
-                  </span>
-                </td>
-                <td>
-                  <span className={`a-badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                </td>
-                <td>
-                  <div className="flex flex-wrap gap-2">
-                    <Link href={`/admin/produtos/${p.id}`} className="a-btn secondary" style={{ padding: "6px 12px", fontSize: 12 }}>
-                      Editar
-                    </Link>
-                    <button onClick={() => duplicate(p)} disabled={busy === p.id} className="a-btn secondary" style={{ padding: "6px 12px", fontSize: 12 }}>
-                      {busy === p.id ? <Spinner /> : "Duplicar"}
-                    </button>
-                    <Link href={`/produto/${p.slug}`} target="_blank" className="a-btn secondary" style={{ padding: "6px 12px", fontSize: 12 }}>
-                      Ver
-                    </Link>
-                    {p.status === "active" ? (
-                      <button onClick={() => setStatus(p, "inactive")} disabled={busy === p.id} className="a-btn secondary" style={{ padding: "6px 12px", fontSize: 12 }}>
-                        Pausar
-                      </button>
-                    ) : (
-                      <button onClick={() => setStatus(p, "active")} disabled={busy === p.id} className="a-btn secondary" style={{ padding: "6px 12px", fontSize: 12 }}>
-                        Ativar
-                      </button>
-                    )}
-                    <button onClick={() => setConfirmDelete(p)} disabled={busy === p.id} className="a-btn danger" style={{ padding: "6px 12px", fontSize: 12 }}>
-                      Excluir
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-          {!filtered.length && (
-            <tr>
-              <td colSpan={6} className="py-10 text-center text-gray-500">
-                Nenhum produto encontrado com esses filtros.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      {/* Confirmação de exclusão */}
-      {confirmDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Confirmar exclusão"
-        >
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">Excluir produto?</h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Você está excluindo <strong>{confirmDelete.name}</strong>. Esta ação não pode ser
-              desfeita — prefere apenas <em>pausar</em> para tirá-lo da loja sem apagar?
+      {/* Desktop: tabela */}
+      <div className="a-tablewrap hidden md:block">
+        {filtered.length === 0 ? (
+          <div className="a-empty">
+            <div className="ic">
+              <Icon name="package" size={36} />
+            </div>
+            <div className="t">
+              {hasFilters ? "Nenhum produto encontrado" : "Seu catálogo ainda está vazio"}
+            </div>
+            <p>
+              {hasFilters
+                ? "Tente ajustar a busca ou os filtros."
+                : "Cadastre sua primeira peça para começar a vender."}
             </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setConfirmDelete(null)} className="a-btn secondary">
-                Cancelar
-              </button>
+            {hasFilters ? (
               <button
-                onClick={() => setStatus(confirmDelete, "inactive")}
                 className="a-btn secondary"
+                onClick={() => {
+                  setQ("");
+                  setStatus("all");
+                  setCategory("all");
+                  setStockFilter("all");
+                  setOnlyPromo(false);
+                  setOnlyFeatured(false);
+                }}
               >
-                Só pausar
+                Limpar filtros
               </button>
-              <button onClick={removeConfirmed} disabled={busy === confirmDelete.id} className="a-btn danger">
-                {busy === confirmDelete.id ? <Spinner /> : "Excluir mesmo assim"}
-              </button>
+            ) : (
+              <Link href="/admin/produtos/novo" className="a-btn">
+                <Icon name="plus" size={15} /> Adicionar primeiro produto
+              </Link>
+            )}
+          </div>
+        ) : (
+          <table className="a-table">
+            <thead>
+              <tr>
+                <th className="w-14">Foto</th>
+                <th>Produto</th>
+                <th>Categoria</th>
+                <th>Preço</th>
+                <th>Estoque</th>
+                <th>Status</th>
+                <th>Atualizado</th>
+                <th className="w-12"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    {r.main_image ? (
+                      <div className="relative w-10 h-12 overflow-hidden rounded-md bg-[color:var(--a-bg)]">
+                        <Image
+                          src={r.main_image}
+                          alt=""
+                          fill
+                          sizes="40px"
+                          className="object-cover"
+                          unoptimized={r.main_image?.startsWith("/")}
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-12 rounded-md bg-[color:var(--a-bg)] flex items-center justify-center text-[color:var(--a-border)]">
+                        <Icon name="image" size={16} />
+                      </div>
+                    )}
+                  </td>
+                  <td className="a-cellmain">
+                    <Link href={`/admin/produtos/${r.id}`} className="hover:underline">
+                      {r.name}
+                    </Link>
+                    {r.is_new && <span className="a-badge amber ml-2">NOVO</span>}
+                  </td>
+                  <td className="text-[color:var(--a-muted)]">{r.categories?.name || "—"}</td>
+                  <td className="tabular-nums whitespace-nowrap">
+                    {r.promo_price ? (
+                      <>
+                        <s className="text-[color:var(--a-muted)] mr-1.5">{brl(r.price)}</s>
+                        <b>{brl(r.promo_price)}</b>
+                      </>
+                    ) : (
+                      brl(r.price)
+                    )}
+                  </td>
+                  <td>{stockBadge(r)}</td>
+                  <td>
+                    <span
+                      className={`a-badge ${
+                        r.status === "active" ? "green" : r.status === "draft" ? "amber" : "gray"
+                      }`}
+                    >
+                      {r.status === "active" ? "Ativo" : r.status === "draft" ? "Rascunho" : "Pausado"}
+                    </span>
+                  </td>
+                  <td className="text-[color:var(--a-muted)] text-xs whitespace-nowrap">
+                    {r.updated_at ? new Date(r.updated_at).toLocaleDateString("pt-BR") : "—"}
+                  </td>
+                  <td>{rowActions(r)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Mobile: lista de cards */}
+      <div className="a-rowlist md:hidden">
+        {filtered.length === 0 && (
+          <div className="a-card">
+            <div className="a-empty">
+              <div className="t">{hasFilters ? "Nada encontrado" : "Catálogo vazio"}</div>
+              <p>{hasFilters ? "Ajuste a busca ou limpe os filtros." : "Cadastre a primeira peça."}</p>
+              <Link href="/admin/produtos/novo" className="a-btn sm">
+                <Icon name="plus" size={14} /> Novo produto
+              </Link>
             </div>
           </div>
-        </div>
+        )}
+        {filtered.map((r) => (
+          <div key={r.id} className="a-row">
+            {r.main_image ? (
+              <div className="relative w-14 h-16 shrink-0 overflow-hidden rounded-lg bg-[color:var(--a-bg)]">
+                <Image
+                  src={r.main_image}
+                  alt=""
+                  fill
+                  sizes="56px"
+                  className="object-cover"
+                  unoptimized={r.main_image?.startsWith("/")}
+                />
+              </div>
+            ) : (
+              <div className="w-14 h-16 shrink-0 rounded-lg bg-[color:var(--a-bg)] flex items-center justify-center text-[color:var(--a-border)]">
+                <Icon name="image" size={18} />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <Link href={`/admin/produtos/${r.id}`} className="font-semibold text-[13.5px] truncate block">
+                {r.name}
+              </Link>
+              <div className="text-xs text-[color:var(--a-muted)] mt-0.5">
+                {r.categories?.name || "—"} ·{" "}
+                {r.promo_price ? (
+                  <>
+                    <s>{brl(r.price)}</s> <b>{brl(r.promo_price)}</b>
+                  </>
+                ) : (
+                  brl(r.price)
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                {stockBadge(r)}
+                <span
+                  className={`a-badge ${
+                    r.status === "active" ? "green" : r.status === "draft" ? "amber" : "gray"
+                  }`}
+                >
+                  {r.status === "active" ? "Ativo" : r.status === "draft" ? "Rascunho" : "Pausado"}
+                </span>
+              </div>
+            </div>
+            {rowActions(r)}
+          </div>
+        ))}
+      </div>
+
+      {toDelete && (
+        <ConfirmDialog
+          title={`Excluir "${toDelete.name}"?`}
+          message="Esta ação não pode ser desfeita. As variantes e o histórico do produto serão removidos."
+          confirmLabel="Excluir mesmo assim"
+          busy={busy}
+          onCancel={() => setToDelete(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </>
   );

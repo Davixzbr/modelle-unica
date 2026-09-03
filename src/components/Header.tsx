@@ -1,75 +1,89 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import FavoritesCounterInline from "@/components/FavoritesCounterInline";
+import Icon from "@/components/Icon";
 
 export default async function Header() {
   const supabase = await createClient();
   const { data: cats } = await supabase
     .from("categories")
     .select("name, slug")
+    .eq("active", true)
     .order("sort_order");
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="font-display text-xl tracking-wide text-ink">
-          Modelle <span className="italic text-caramel">Única</span>
+    <header className="sticky top-0 z-40 border-b border-line/70 bg-cream/85 backdrop-blur-md">
+      <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between gap-4 px-5">
+        {/* Logo */}
+        <Link href="/" className="font-display text-[22px] tracking-wide text-ink">
+          Modelle <span className="italic text-gold-deep">Única</span>
         </Link>
 
-        <nav className="hidden items-center gap-7 text-[13px] uppercase tracking-widest text-ink-soft md:flex">
-          <Link href="/catalogo" className="transition-colors hover:text-caramel">
+        {/* Navegação desktop */}
+        <nav className="hidden items-center gap-8 text-[12px] font-medium uppercase tracking-[0.18em] text-ink-soft lg:flex">
+          <Link href="/catalogo" className="transition-colors hover:text-ink">
             Catálogo
           </Link>
-          {cats?.slice(0, 3).map((c: { name: string; slug: string }) => (
+          {(cats as { name: string; slug: string }[] | null)?.slice(0, 3).map((c) => (
             <Link
               key={c.slug}
               href={`/catalogo?cat=${c.slug}`}
-              className="transition-colors hover:text-caramel"
+              className="transition-colors hover:text-ink"
             >
               {c.name}
             </Link>
           ))}
-          <Link href="/sobre" className="transition-colors hover:text-caramel">
+          <Link href="/sobre" className="transition-colors hover:text-ink">
             Sobre
           </Link>
-          <Link href="/contato" className="transition-colors hover:text-caramel">
+          <Link href="/contato" className="transition-colors hover:text-ink">
             Contato
           </Link>
         </nav>
 
-        <div className="flex items-center gap-4">
+        {/* Ações */}
+        <div className="flex items-center gap-1.5">
+          <Link
+            href="/catalogo"
+            aria-label="Buscar no catálogo"
+            className="grid h-10 w-10 place-items-center rounded-full text-ink transition-colors hover:bg-sand"
+          >
+            <Icon name="search" size={19} />
+          </Link>
           <Link
             href="/favoritos"
             aria-label="Favoritos"
-            className="relative text-ink transition-colors hover:text-caramel"
+            className="relative grid h-10 w-10 place-items-center rounded-full text-ink transition-colors hover:bg-sand"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
+            <Icon name="heart" size={19} />
             <FavoritesCounterInline />
           </Link>
-          <Link
+          <a
             href="https://www.instagram.com/modelle_unica/"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Instagram"
-            className="text-ink transition-colors hover:text-caramel"
+            className="hidden h-10 w-10 place-items-center rounded-full text-ink transition-colors hover:bg-sand sm:grid"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-              <rect x="2" y="2" width="20" height="20" rx="5" />
-              <circle cx="12" cy="12" r="4" />
-              <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-            </svg>
-          </Link>
+            <Icon name="instagram" size={19} />
+          </a>
         </div>
       </div>
 
-      {/* Nav mobile */}
-      <nav className="flex items-center justify-center gap-5 border-t border-line py-2 text-[11px] uppercase tracking-widest text-ink-soft md:hidden">
-        <Link href="/catalogo">Catálogo</Link>
-        <Link href="/sobre">Sobre</Link>
-        <Link href="/contato">Contato</Link>
-        <Link href="/medidas">Medidas</Link>
+      {/* Nav mobile — compacta, rolável */}
+      <nav
+        className="flex items-center justify-start gap-6 overflow-x-auto border-t border-line/60 px-5 py-2.5 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-soft md:hidden"
+        aria-label="Navegação mobile"
+      >
+        <Link href="/catalogo" className="flex-none hover:text-ink">Catálogo</Link>
+        {(cats as { name: string; slug: string }[] | null)?.slice(0, 3).map((c) => (
+          <Link key={c.slug} href={`/catalogo?cat=${c.slug}`} className="flex-none hover:text-ink">
+            {c.name}
+          </Link>
+        ))}
+        <Link href="/sobre" className="flex-none hover:text-ink">Sobre</Link>
+        <Link href="/contato" className="flex-none hover:text-ink">Contato</Link>
+        <Link href="/medidas" className="flex-none hover:text-ink">Medidas</Link>
       </nav>
     </header>
   );

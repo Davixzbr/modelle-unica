@@ -8,6 +8,7 @@ export type Categorie = {
   active: boolean;
 };
 export type Collection = {
+  product_count?: number;
   id: string;
   name: string;
   slug: string;
@@ -37,6 +38,8 @@ export type Product = {
   featured: boolean;
   is_new: boolean;
   status: "active" | "draft" | "inactive";
+  meta_title: string | null;
+  meta_description: string | null;
   views: number;
   favorites_count: number;
   sort_order: number;

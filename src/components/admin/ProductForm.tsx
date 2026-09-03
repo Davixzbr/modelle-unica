@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 import { slugify, compressImage } from "@/lib/format";
 import { toast } from "@/components/Toast";
+import ToastHost from "@/components/Toast";
 import { Spinner } from "@/components/States";
+import Icon from "@/components/Icon";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import type { Product, Variant, Categorie, Collection } from "@/lib/types";
 
 type Props = {
@@ -18,7 +20,7 @@ type Props = {
 };
 
 const TAG_OPTIONS = ["novo", "promocao", "exclusivo"];
-const SIZE_PRESETS = ["P", "M", "G", "GG"];
+const SIZE_PRESETS = ["PP", "P", "M", "G", "GG"];
 
 type StockGrid = Record<string, number>; // "size||color" -> stock
 
@@ -26,7 +28,7 @@ export default function ProductForm({ product, variants, categories, collections
   const router = useRouter();
   const isNew = !product;
 
-  // ---- Seção: informações ----
+  // ── Informações ──────────────────────────────────────────────
   const [name, setName] = useState(product?.name || "");
   const [autoSlug] = useState(isNew);
   const [slug, setSlug] = useState(product?.slug || "");
@@ -36,20 +38,18 @@ export default function ProductForm({ product, variants, categories, collections
   const [sizeChart, setSizeChart] = useState(product?.size_chart || "");
   const [categoryId, setCategoryId] = useState(product?.category_id || "");
   const [collectionId, setCollectionId] = useState(product?.collection_id || "");
-  const [tags, setTags] = useState<string[]>(product?.tags || []);
-  const [status, setStatus] = useState<Product["status"]>(product?.status || "active");
-  const [featured, setFeatured] = useState(product?.featured || false);
-  const [isNewFlag, setIsNewFlag] = useState(product?.is_new ?? isNew);
 
-  // ---- Seção: preço ----
+  // ── Preço ────────────────────────────────────────────────────
   const [price, setPrice] = useState(product?.price?.toString() || "");
   const [promoPrice, setPromoPrice] = useState(product?.promo_price?.toString() || "");
 
-  // ---- Seção: imagens ----
+  // ── Imagens ──────────────────────────────────────────────────
   const [images, setImages] = useState<string[]>(product?.images || []);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
 
-  // ---- Seção: variantes ----
+  // ── Variações ────────────────────────────────────────────────
   const [sizes, setSizes] = useState<string[]>(product?.sizes || SIZE_PRESETS);
   const [colors, setColors] = useState<string[]>(product?.colors || []);
   const [stocks, setStocks] = useState<StockGrid>(() => {
@@ -60,9 +60,42 @@ export default function ProductForm({ product, variants, categories, collections
     return m;
   });
 
+  // ── Marketing ────────────────────────────────────────────────
+  const [tags, setTags] = useState<string[]>(product?.tags || []);
+  const [status, setStatus] = useState<Product["status"]>(product?.status || "active");
+  const [featured, setFeatured] = useState(product?.featured || false);
+  const [isNewFlag, setIsNewFlag] = useState(product?.is_new ?? isNew);
+
+  // ── SEO ──────────────────────────────────────────────────────
+  const [metaTitle, setMetaTitle] = useState(product?.meta_title || "");
+  const [metaDescription, setMetaDescription] = useState(product?.meta_description || "");
+
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [showUnsaved, setShowUnsaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Detecta alterações não salvas
+  useEffect(() => {
+    const on = () => setDirty(true);
+    const form = document.getElementById("product-form");
+    form?.addEventListener("input", on, { once: false });
+    form?.addEventListener("change", on, { once: false });
+    return () => {
+      form?.removeEventListener("input", on);
+      form?.removeEventListener("change", on);
+    };
+  }, []);
+
+  // Bloqueia navegação do browser com pendências
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
 
   const stockKey = (s: string, c: string) => `${s}||${c}`;
   const stockOf = (s: string, c: string) => stocks[stockKey(s, c)] ?? 0;
@@ -97,14 +130,17 @@ export default function ProductForm({ product, variants, categories, collections
     return errs;
   }
 
-  async function uploadFiles(files: FileList) {
+  async function uploadFiles(files: File[]) {
+    if (!files.length) return;
     setUploading(true);
+    setUploadProgress(0);
     const supabase = createClient();
     const uploaded: string[] = [];
-    for (const file of Array.from(files)) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const compressed = await compressImage(file);
       if (compressed.size > 5 * 1024 * 1024) {
-        toast(`${file.name}: maior que 5 MB mesmo comprimida`, "err");
+        toast(`${file.name}: maior que 5 MB mesmo comprimida`, "error");
         continue;
       }
       const ext = compressed.type === "image/png" ? "png" : "jpg";
@@ -113,17 +149,19 @@ export default function ProductForm({ product, variants, categories, collections
         .from("product-images")
         .upload(path, compressed, { contentType: compressed.type });
       if (error) {
-        toast(`Falha no upload de ${file.name}`, "err");
+        toast(`Falha no upload de ${file.name}`, "error");
         continue;
       }
       const { data } = supabase.storage.from("product-images").getPublicUrl(path);
       uploaded.push(data.publicUrl);
+      setUploadProgress(Math.round(((i + 1) / files.length) * 100));
     }
     if (uploaded.length) {
       setImages((prev) => [...prev, ...uploaded]);
-      toast(`${uploaded.length} foto(s) enviada(s)`);
+      toast(`${uploaded.length} foto(s) enviada(s)`, "success");
     }
     setUploading(false);
+    setUploadProgress(0);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -141,13 +179,13 @@ export default function ProductForm({ product, variants, categories, collections
     setImages((prev) => prev.filter((u) => u !== url));
   }
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  async function save(e?: React.FormEvent): Promise<boolean> {
+    e?.preventDefault();
     const errs = validate();
     setErrors(errs);
     if (errs.length) {
-      toast("Corrija os erros do formulário", "err");
-      return;
+      toast("Corrija os erros do formulário", "error");
+      return false;
     }
 
     setSaving(true);
@@ -171,6 +209,8 @@ export default function ProductForm({ product, variants, categories, collections
       featured,
       is_new: isNewFlag,
       status,
+      meta_title: metaTitle.trim() || null,
+      meta_description: metaDescription.trim() || null,
     };
 
     let productId = product?.id;
@@ -188,7 +228,6 @@ export default function ProductForm({ product, variants, categories, collections
         if (error) throw error;
       }
 
-      // Sincroniza grade de variantes via RPC (upsert + remoção)
       const combos = sizes.flatMap((s) =>
         (colors.length ? colors : [""]).map((c) => ({
           size: s,
@@ -202,358 +241,547 @@ export default function ProductForm({ product, variants, categories, collections
       });
       if (rpcErr) throw rpcErr;
 
-      toast(isNew ? "Produto cadastrado!" : "Produto atualizado!");
+      toast(isNew ? "Produto cadastrado com sucesso." : "Produto salvo com sucesso.", "success");
+      setDirty(false);
       router.push("/admin/produtos");
       router.refresh();
+      return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao salvar";
-      toast(msg.includes("duplicate") ? "Slug já existe — mude o nome." : msg, "err");
+      toast(msg.includes("duplicate") ? "Slug já existe — mude o nome." : "Não foi possível salvar o produto.", "error");
       setSaving(false);
+      return false;
     }
   }
 
+  // Navegação interna com unsaved check (link Cancelar / menu)
+  function guardedNav(href: string) {
+    if (dirty) {
+      setShowUnsaved(true);
+      (window as unknown as { __muNavTo?: string }).__muNavTo = href;
+    } else {
+      router.push(href);
+    }
+  }
+
+  const fieldset = (title: string, children: React.ReactNode, cls = "") => (
+    <fieldset className={`a-fieldset ${cls}`}>
+      <legend>{title}</legend>
+      {children}
+    </fieldset>
+  );
+
   return (
-    <form onSubmit={save}>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl">{isNew ? "Novo produto" : "Editar produto"}</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Estoque total: <strong>{totalStock}</strong> · {sizes.length} tamanho(s) ×{" "}
-            {colors.length} cor(es)
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/admin/produtos" className="a-btn secondary">Cancelar</Link>
-          <button type="submit" disabled={saving || uploading} className="a-btn">
-            {saving ? <><Spinner /> Salvando…</> : "Salvar produto"}
+    <>
+      <ToastHost />
+      <form
+        id="product-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(e);
+        }}
+      >
+        {/* Cabeçalho */}
+        <div className="a-pagehead">
+          <div>
+            <h1>{isNew ? "Novo produto" : "Editar produto"}</h1>
+            <p>
+              Estoque total: <strong>{totalStock}</strong> · {sizes.length} tamanho(s) × {colors.length} cor(es)
+            </p>
+          </div>
+          <button
+            type="button"
+            className="a-btn secondary"
+            onClick={() => guardedNav("/admin/produtos")}
+          >
+            Cancelar
           </button>
         </div>
-      </div>
 
-      {errors.length > 0 && (
-        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-          <ul className="list-inside list-disc space-y-1">
-            {errors.map((e) => <li key={e}>{e}</li>)}
-          </ul>
-        </div>
-      )}
+        {errors.length > 0 && (
+          <div className="mb-4 rounded-lg bg-[#fbeeed] px-4 py-3 text-sm text-[color:var(--a-danger)]" role="alert">
+            <ul className="list-inside list-disc space-y-1">
+              {errors.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* ===== Coluna principal ===== */}
-        <div className="space-y-4 lg:col-span-2">
-          {/* Informações gerais */}
-          <fieldset className="a-card space-y-4">
-            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-              Informações gerais
-            </legend>
-            <div>
-              <label htmlFor="p-name">Nome do produto *</label>
-              <input
-                id="p-name"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (autoSlug) setSlug(e.target.value);
-                }}
-                placeholder="Ex.: Conjunto Marrom"
-              />
-              {!isNew && (
-                <p className="mt-1 text-xs text-gray-400">
-                  Slug: /produto/{slugify(slug || name)} (URL amigável)
-                </p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="p-short">Descrição curta (cartões e compartilhamento)</label>
-              <input
-                id="p-short"
-                value={shortDescription}
-                onChange={(e) => setShortDescription(e.target.value)}
-                maxLength={120}
-                placeholder="Uma linha que resume a peça"
-              />
-              <p className="mt-1 text-right text-xs text-gray-400">{shortDescription.length}/120</p>
-            </div>
-            <div>
-              <label htmlFor="p-desc">Descrição completa</label>
-              <textarea
-                id="p-desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={4}
-                placeholder="Caimento, modelagem e detalhes…"
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="p-fabric">Tecido / material</label>
-                <input id="p-fabric" value={fabric} onChange={(e) => setFabric(e.target.value)} />
-              </div>
-              <div>
-                <label htmlFor="p-chart">Tabela de medidas</label>
-                <input
-                  id="p-chart"
-                  value={sizeChart}
-                  onChange={(e) => setSizeChart(e.target.value)}
-                  placeholder="Ex.: Model veste P"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="p-cat">Categoria</label>
-                <select id="p-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                  <option value="">— Sem categoria —</option>
-                  {categories.filter((c) => c.active).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="p-col">Coleção</label>
-                <select id="p-col" value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
-                  <option value="">— Sem coleção —</option>
-                  {collections.filter((c) => c.active).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </fieldset>
-
-          {/* Imagens */}
-          <fieldset className="a-card">
-            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-              Fotos ({images.length}) — a primeira é a capa
-            </legend>
-            <div className="flex flex-wrap gap-3">
-              {images.map((url, i) => (
-                <div key={url} className="relative">
-                  <div className="relative h-28 w-24 overflow-hidden rounded-lg border border-gray-200">
-                    <Image src={url} alt={`Foto ${i + 1}`} fill sizes="96px" className="object-cover" />
-                  </div>
-                  {i === 0 && (
-                    <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
-                      Capa
-                    </span>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* ═══ Coluna principal ═══ */}
+          <div className="space-y-4 lg:col-span-2">
+            {fieldset(
+              "Informações",
+              <>
+                <div>
+                  <label htmlFor="p-name">Nome do produto *</label>
+                  <input
+                    id="p-name"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (autoSlug) setSlug(e.target.value);
+                    }}
+                    placeholder="Ex.: Conjunto Marrom"
+                  />
+                  {!isNew && (
+                    <p className="a-helptext">URL: /produto/{slugify(slug || name)}</p>
                   )}
-                  <div className="mt-1 flex justify-center gap-2">
-                    <button type="button" onClick={() => moveImage(i, -1)} className="text-xs text-gray-500 hover:text-gray-800" aria-label="Mover para esquerda">←</button>
-                    <button type="button" onClick={() => removeImage(url)} className="text-xs text-red-500 hover:text-red-700" aria-label={`Remover foto ${i + 1}`}>✕</button>
-                    <button type="button" onClick={() => moveImage(i, 1)} className="text-xs text-gray-500 hover:text-gray-800" aria-label="Mover para direita">→</button>
+                </div>
+                <div className="mt-4">
+                  <label htmlFor="p-short">Descrição curta (cartões e compartilhamento)</label>
+                  <input
+                    id="p-short"
+                    value={shortDescription}
+                    onChange={(e) => setShortDescription(e.target.value)}
+                    maxLength={120}
+                    placeholder="Uma linha que resume a peça"
+                  />
+                  <p className="mt-1 text-right text-xs text-[color:var(--a-muted)]">
+                    {shortDescription.length}/120
+                  </p>
+                </div>
+                <div className="mt-4">
+                  <label htmlFor="p-desc">Descrição completa</label>
+                  <textarea
+                    id="p-desc"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    placeholder="Caimento, modelagem e detalhes…"
+                  />
+                </div>
+                <div className="a-grid2 mt-4">
+                  <div>
+                    <label htmlFor="p-cat">Categoria</label>
+                    <select id="p-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                      <option value="">— Sem categoria —</option>
+                      {categories
+                        .filter((c) => c.active)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="p-col">Coleção</label>
+                    <select
+                      id="p-col"
+                      value={collectionId}
+                      onChange={(e) => setCollectionId(e.target.value)}
+                    >
+                      <option value="">— Sem coleção —</option>
+                      {collections
+                        .filter((c) => c.active)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
                   </div>
                 </div>
-              ))}
-              <label className="flex h-28 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 text-xs text-gray-500 hover:border-[var(--a-accent)] hover:text-[var(--a-accent)]">
-                {uploading ? <Spinner /> : "+ Foto"}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => e.target.files?.length && uploadFiles(e.target.files)}
-                />
-              </label>
-            </div>
-            <p className="mt-2 text-xs text-gray-400">
-              JPG/PNG/WebP até 5 MB — comprimimos automaticamente para carregar rápido.
-            </p>
-          </fieldset>
-
-          {/* Variantes — matriz cor × tamanho */}
-          <fieldset className="a-card">
-            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-              Estoque por cor × tamanho
-            </legend>
-            {sizes.length > 0 && colors.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-gray-500">
-                      <th className="pb-2 pr-4">Cor \\ Tamanho</th>
-                      {sizes.map((s) => (
-                        <th key={s} className="pb-2 pr-3">{s}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {colors.map((c) => (
-                      <tr key={c}>
-                        <td className="py-1.5 pr-4 font-medium">{c}</td>
-                        {sizes.map((s) => (
-                          <td key={s} className="py-1.5 pr-3">
-                            <input
-                              type="number"
-                              min={0}
-                              inputMode="numeric"
-                              value={stockOf(s, c)}
-                              onChange={(e) => setStockOf(s, c, Number(e.target.value))}
-                              style={{ width: 72 }}
-                              aria-label={`Estoque de ${c} tamanho ${s}`}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">Defina tamanhos e cores ao lado para gerar a matriz.</p>
+              </>
             )}
-          </fieldset>
-        </div>
 
-        {/* ===== Coluna lateral ===== */}
-        <div className="space-y-4">
-          {/* Preço */}
-          <fieldset className="a-card space-y-4">
-            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Preço</legend>
-            <div>
-              <label htmlFor="p-price">Preço normal (R$) *</label>
-              <input
-                id="p-price"
-                type="number"
-                step="0.01"
-                min="0.01"
-                inputMode="decimal"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="189.90"
-              />
-            </div>
-            <div>
-              <label htmlFor="p-promo">Preço promocional (opcional)</label>
-              <input
-                id="p-promo"
-                type="number"
-                step="0.01"
-                min="0"
-                inputMode="decimal"
-                value={promoPrice}
-                onChange={(e) => setPromoPrice(e.target.value)}
-                placeholder="149.90"
-                aria-invalid={promoInvalid}
-              />
-              {promoInvalid && (
-                <p className="mt-1 text-xs text-red-600">Deve ser menor que o preço normal.</p>
-              )}
-              {hasDiscount && (
-                <p className="mt-1 text-xs font-semibold text-green-700">
-                  Desconto de {discountPct}% ativo — aparece em destaque na loja.
-                </p>
-              )}
-            </div>
-          </fieldset>
-
-          {/* Status */}
-          <fieldset className="a-card space-y-4">
-            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Publicação</legend>
-            <div>
-              <label htmlFor="p-status">Status</label>
-              <select id="p-status" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}>
-                <option value="active">Ativo (visível na loja)</option>
-                <option value="draft">Rascunho (oculto)</option>
-                <option value="inactive">Inativo</option>
-              </select>
-            </div>
-            <label className="flex items-center gap-2 text-sm font-normal normal-case tracking-normal">
-              <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} style={{ width: 16 }} />
-              Destacar na Home ("Destaques")
-            </label>
-            <label className="flex items-center gap-2 text-sm font-normal normal-case tracking-normal">
-              <input type="checkbox" checked={isNewFlag} onChange={(e) => setIsNewFlag(e.target.checked)} style={{ width: 16 }} />
-              Marcar como "Novidade"
-            </label>
-          </fieldset>
-
-          {/* Grade */}
-          <fieldset className="a-card space-y-4">
-            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Tamanhos, cores e tags</legend>
-            <div>
-              <label>Tamanhos</label>
-              <div className="flex flex-wrap gap-2">
-                {SIZE_PRESETS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setSizes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])}
-                    className={`rounded-full border px-3.5 py-1.5 text-sm ${
-                      sizes.includes(s) ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white" : "border-gray-300 text-gray-600"
-                    }`}
-                    aria-pressed={sizes.includes(s)}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <input
-                aria-label="Tamanho personalizado"
-                placeholder="+ tamanho personalizado (Enter)"
-                onKeyDown={(e) => {
-                  const v = (e.target as HTMLInputElement).value.trim().toUpperCase();
-                  if (e.key === "Enter" && v) {
+            {/* Imagens — drag & drop */}
+            {fieldset(
+              "Imagens",
+              <>
+                <label
+                  onDragOver={(e) => {
                     e.preventDefault();
-                    setSizes((prev) => (prev.includes(v) ? prev : [...prev, v]));
-                    (e.target as HTMLInputElement).value = "";
-                  }
-                }}
-                className="mt-2"
-              />
-            </div>
-            <div>
-              <label>Cores</label>
-              <div className="flex flex-wrap gap-2">
-                {colors.map((c) => (
-                  <span key={c} className="rounded-full bg-gray-100 px-3 py-1.5 text-sm">
-                    {c}
-                    <button
-                      type="button"
-                      onClick={() => setColors((prev) => prev.filter((x) => x !== c))}
-                      className="ml-1.5 text-gray-400 hover:text-red-500"
-                      aria-label={`Remover cor ${c}`}
-                    >
-                      ✕
-                    </button>
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    if (e.dataTransfer.files?.length) uploadFiles(Array.from(e.dataTransfer.files));
+                  }}
+                  className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center transition-colors ${
+                    dragOver
+                      ? "border-[color:var(--a-accent)] bg-[color:var(--a-accent-soft)]"
+                      : "border-[color:var(--a-border)] hover:border-[color:var(--a-accent)]"
+                  }`}
+                >
+                  <span className="text-[color:var(--a-muted)] mb-1">
+                    <Icon name="upload" size={22} />
                   </span>
-                ))}
+                  <span className="text-sm font-medium">
+                    {uploading ? `Enviando… ${uploadProgress}%` : "Arraste suas fotos aqui"}
+                  </span>
+                  <span className="text-xs text-[color:var(--a-muted)] mt-0.5">
+                    ou toque para selecionar do dispositivo · a 1ª é a capa
+                  </span>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files?.length && uploadFiles(Array.from(e.target.files))}
+                  />
+                </label>
+                {uploading && (
+                  <div className="mt-2 h-1 rounded bg-[color:var(--a-bg)] overflow-hidden">
+                    <div
+                      className="h-full bg-[color:var(--a-accent)] transition-all"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+                {images.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {images.map((url, i) => (
+                      <div key={url} className="relative">
+                        <div className="relative h-28 w-24 overflow-hidden rounded-lg border border-[color:var(--a-border-soft)] bg-[color:var(--a-bg)]">
+                          <Image
+                            src={url}
+                            alt={`Foto ${i + 1}`}
+                            fill
+                            sizes="96px"
+                            className="object-cover"
+                          />
+                        </div>
+                        {i === 0 && (
+                          <span className="absolute left-1 top-1 rounded bg-[color:var(--a-text)] px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
+                            Capa
+                          </span>
+                        )}
+                        <div className="mt-1 flex justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => moveImage(i, -1)}
+                            className="a-iconbtn !w-7 !h-7"
+                            aria-label="Mover para esquerda"
+                          >
+                            <Icon name="chevronLeft" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeImage(url)}
+                            className="a-iconbtn !w-7 !h-7 hover:!text-[color:var(--a-danger)]"
+                            aria-label={`Remover foto ${i + 1}`}
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveImage(i, 1)}
+                            className="a-iconbtn !w-7 !h-7"
+                            aria-label="Mover para direita"
+                          >
+                            <Icon name="chevronRight" size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="a-helptext mt-2">
+                  JPG/PNG/WebP até 5 MB — comprimimos automaticamente para carregar rápido.
+                </p>
+              </>
+            )}
+
+            {/* Variações — matriz */}
+            {fieldset(
+              "Variações — estoque por cor × tamanho",
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label>Tamanhos</label>
+                    <div className="flex flex-wrap gap-2">
+                      {SIZE_PRESETS.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() =>
+                            setSizes((prev) =>
+                              prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+                            )
+                          }
+                          className={`a-chip ${sizes.includes(s) ? "on" : ""}`}
+                          aria-pressed={sizes.includes(s)}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      aria-label="Tamanho personalizado"
+                      placeholder="+ tamanho personalizado (Enter)"
+                      onKeyDown={(e) => {
+                        const v = (e.target as HTMLInputElement).value.trim().toUpperCase();
+                        if (e.key === "Enter" && v) {
+                          e.preventDefault();
+                          setSizes((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                          (e.target as HTMLInputElement).value = "";
+                        }
+                      }}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <label>Cores</label>
+                    <div className="flex flex-wrap gap-2">
+                      {colors.map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-1 rounded-full bg-[color:var(--a-bg)] px-3 py-1.5 text-sm"
+                        >
+                          {c}
+                          <button
+                            type="button"
+                            onClick={() => setColors((prev) => prev.filter((x) => x !== c))}
+                            className="text-[color:var(--a-muted)] hover:text-[color:var(--a-danger)]"
+                            aria-label={`Remover cor ${c}`}
+                          >
+                            <Icon name="x" size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <input
+                      aria-label="Nova cor"
+                      placeholder="+ cor (Enter)"
+                      onKeyDown={(e) => {
+                        const v = (e.target as HTMLInputElement).value.trim();
+                        if (e.key === "Enter" && v) {
+                          e.preventDefault();
+                          setColors((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                          (e.target as HTMLInputElement).value = "";
+                        }
+                      }}
+                      className="mt-2"
+                    />
+                  </div>
+                </div>
+                <div className="mt-5">
+                  {sizes.length > 0 && colors.length > 0 ? (
+                    <div className="overflow-x-auto rounded-lg border border-[color:var(--a-border-soft)]">
+                      <table className="a-table">
+                        <thead>
+                          <tr>
+                            <th>Cor \ Tamanho</th>
+                            {sizes.map((s) => (
+                              <th key={s} className="text-center">
+                                {s}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {colors.map((c) => (
+                            <tr key={c}>
+                              <td className="a-cellmain">{c}</td>
+                              {sizes.map((s) => (
+                                <td key={s} className="text-center">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    inputMode="numeric"
+                                    value={stockOf(s, c)}
+                                    onChange={(e) => setStockOf(s, c, Number(e.target.value))}
+                                    style={{ width: 68 }}
+                                    className="!px-2 text-center"
+                                    aria-label={`Estoque de ${c} tamanho ${s}`}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="a-helptext">
+                      Defina tamanhos e cores acima para gerar a matriz de estoque.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ═══ Coluna lateral ═══ */}
+          <div className="space-y-4">
+            {fieldset(
+              "Preço",
+              <>
+                <div>
+                  <label htmlFor="p-price">Preço normal (R$) *</label>
+                  <input
+                    id="p-price"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    inputMode="decimal"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="189.90"
+                  />
+                </div>
+                <div className="mt-4">
+                  <label htmlFor="p-promo">Preço promocional (opcional)</label>
+                  <input
+                    id="p-promo"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={promoPrice}
+                    onChange={(e) => setPromoPrice(e.target.value)}
+                    placeholder="149.90"
+                    aria-invalid={promoInvalid}
+                  />
+                  {promoInvalid && (
+                    <p className="mt-1 text-xs text-[color:var(--a-danger)]">
+                      Deve ser menor que o preço normal.
+                    </p>
+                  )}
+                  {hasDiscount && (
+                    <p className="a-helptext !text-[color:var(--a-accent)] font-semibold">
+                      Desconto de {discountPct}% — aparece em destaque na loja.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {fieldset(
+              "Marketing",
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {TAG_OPTIONS.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() =>
+                        setTags((prev) =>
+                          prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                        )
+                      }
+                      className={`a-chip ${tags.includes(t) ? "on" : ""}`}
+                      aria-pressed={tags.includes(t)}
+                    >
+                      {t === "promocao" ? "promoção" : t}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-4 flex items-center gap-2 text-sm font-normal normal-case tracking-normal">
+                  <input
+                    type="checkbox"
+                    checked={featured}
+                    onChange={(e) => setFeatured(e.target.checked)}
+                    style={{ width: 16 }}
+                  />
+                  Destacar na Home (&quot;Destaques&quot;)
+                </label>
+                <label className="mt-2 flex items-center gap-2 text-sm font-normal normal-case tracking-normal">
+                  <input
+                    type="checkbox"
+                    checked={isNewFlag}
+                    onChange={(e) => setIsNewFlag(e.target.checked)}
+                    style={{ width: 16 }}
+                  />
+                  Marcar como &quot;Novidade&quot;
+                </label>
+              </>
+            )}
+
+            {fieldset(
+              "SEO",
+              <>
+                <div>
+                  <label htmlFor="p-mt">Título (Google / compartilhamento)</label>
+                  <input
+                    id="p-mt"
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                    maxLength={60}
+                    placeholder={`${name || "Produto"} — Modelle Única`}
+                  />
+                  <p className="mt-1 text-right text-xs text-[color:var(--a-muted)]">
+                    {metaTitle.length}/60
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <label htmlFor="p-md">Descrição SEO</label>
+                  <textarea
+                    id="p-md"
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    rows={2}
+                    maxLength={160}
+                    placeholder={shortDescription || "Aparece no resultado de busca do Google."}
+                  />
+                  <p className="mt-1 text-right text-xs text-[color:var(--a-muted)]">
+                    {metaDescription.length}/160
+                  </p>
+                </div>
+              </>
+            )}
+
+            {fieldset(
+              "Publicação",
+              <div>
+                <label htmlFor="p-status">Status</label>
+                <select
+                  id="p-status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as Product["status"])}
+                >
+                  <option value="active">Ativo (visível na loja)</option>
+                  <option value="draft">Rascunho (oculto)</option>
+                  <option value="inactive">Inativo</option>
+                </select>
               </div>
-              <input
-                aria-label="Nova cor"
-                placeholder="+ cor (Enter)"
-                onKeyDown={(e) => {
-                  const v = (e.target as HTMLInputElement).value.trim();
-                  if (e.key === "Enter" && v) {
-                    e.preventDefault();
-                    setColors((prev) => (prev.includes(v) ? prev : [...prev, v]));
-                    (e.target as HTMLInputElement).value = "";
-                  }
-                }}
-                className="mt-2"
-              />
-            </div>
-            <div>
-              <label>Tags</label>
-              <div className="flex flex-wrap gap-2">
-                {TAG_OPTIONS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}
-                    className={`rounded-full border px-3.5 py-1.5 text-sm capitalize ${
-                      tags.includes(t) ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white" : "border-gray-300 text-gray-600"
-                    }`}
-                    aria-pressed={tags.includes(t)}
-                  >
-                    {t === "promocao" ? "promoção" : t}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </fieldset>
+            )}
+          </div>
         </div>
-      </div>
-    </form>
+
+        {/* Barra fixa de ações */}
+        <div className="a-savebar">
+          <span className="info">
+            {dirty ? "Alterações não salvas" : totalStock > 0 ? `${totalStock} peças em estoque` : "Sem estoque"}
+          </span>
+          <button type="button" className="a-btn secondary" onClick={() => guardedNav("/admin/produtos")}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={saving || uploading} className="a-btn">
+            {saving ? (
+              <>
+                <Spinner /> Salvando…
+              </>
+            ) : isNew ? (
+              "Cadastrar produto"
+            ) : (
+              "Salvar alterações"
+            )}
+          </button>
+        </div>
+      </form>
+
+      {showUnsaved && (
+        <ConfirmDialog
+          title="Você possui alterações não salvas"
+          message="Se sair agora, as alterações serão perdidas."
+          confirmLabel="Sair sem salvar"
+          cancelLabel="Continuar editando"
+          onCancel={() => setShowUnsaved(false)}
+          onConfirm={() => {
+            setShowUnsaved(false);
+            setDirty(false);
+            const href = (window as unknown as { __muNavTo?: string }).__muNavTo || "/admin/produtos";
+            router.push(href);
+          }}
+        />
+      )}
+    </>
   );
 }

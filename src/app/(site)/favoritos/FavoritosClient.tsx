@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase-client";
 import { useFavorites } from "@/hooks/useFavorites";
 import ProductCard from "@/components/ProductCard";
 import { EmptyState, ProductGridSkeleton } from "@/components/States";
+import Icon from "@/components/Icon";
+import { toast } from "@/components/Toast";
 import type { Product } from "@/lib/types";
 
 export default function FavoritosClient({ lowStock }: { lowStock: number }) {
@@ -32,6 +34,11 @@ export default function FavoritosClient({ lowStock }: { lowStock: number }) {
       });
   }, [ids, ready]);
 
+  function onRemove(id: string, name: string) {
+    remove(id);
+    toast(`${name} removida dos favoritos`, "warn");
+  }
+
   if (!ready || products === null) {
     return <ProductGridSkeleton count={4} />;
   }
@@ -42,10 +49,7 @@ export default function FavoritosClient({ lowStock }: { lowStock: number }) {
         title="Sua lista está vazia"
         hint="Toque no coração nas peças que você amou para salvá-las aqui — ficam guardadas neste dispositivo."
         action={
-          <Link
-            href="/catalogo"
-            className="rounded-full bg-ink px-10 py-3.5 text-[12px] font-semibold uppercase tracking-widest text-cream transition-colors hover:bg-caramel"
-          >
+          <Link href="/catalogo" className="btn btn-solid">
             Explorar catálogo
           </Link>
         }
@@ -54,19 +58,26 @@ export default function FavoritosClient({ lowStock }: { lowStock: number }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 lg:grid-cols-4">
-      {products.map((p) => (
-        <div key={p.id} className="relative">
-          <ProductCard p={p} lowStock={lowStock} />
-          <button
-            onClick={() => remove(p.id)}
-            className="absolute right-2 top-2 z-10 rounded-full bg-cream/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-ink shadow-sm transition-colors hover:bg-red-500 hover:text-white"
-            aria-label={`Remover ${p.name} dos favoritos`}
-          >
-            Remover
-          </button>
-        </div>
-      ))}
+    <div>
+      <p className="mb-6 text-[13px] text-ink-faint">
+        {products.length} peça{products.length > 1 ? "s" : ""} salva
+        {products.length > 1 ? "s" : ""} neste dispositivo
+      </p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-4">
+        {products.map((p) => (
+          <div key={p.id} className="group relative">
+            <ProductCard p={p} lowStock={lowStock} />
+            <button
+              onClick={() => onRemove(p.id, p.name)}
+              className="absolute right-11 top-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-cream/90 text-ink-faint opacity-0 shadow-card transition-all duration-200 hover:text-wine group-hover:opacity-100 focus-visible:opacity-100"
+              aria-label={`Remover ${p.name} dos favoritos`}
+              title="Remover dos favoritos"
+            >
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

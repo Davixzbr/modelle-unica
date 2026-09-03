@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase-client";
 import { brl, productWaMessage, waLink, waNumber, shareProduct } from "@/lib/format";
 import { logEvent } from "@/lib/analytics";
 import { useFavorites } from "@/hooks/useFavorites";
+import Icon from "@/components/Icon";
 import { toast } from "@/components/Toast";
 import type { Product, Variant } from "@/lib/types";
 
@@ -58,22 +60,25 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
     return total;
   }
 
-  // Libera tamanho/cor automaticamente quando só existe uma opção
   useEffect(() => {
     if (p.sizes.length === 1) setSize(p.sizes[0]);
     if (p.colors.length === 1) setColor(p.colors[0]);
   }, [p.sizes, p.colors]);
 
+  // Log de visualização (uma vez por montagem)
+  useEffect(() => {
+    logEvent("view", { product_id: p.id });
+  }, [p.id]);
+
   const effectivePrice = p.promo_price != null && p.promo_price < p.price ? p.promo_price : p.price;
   const hasPromo = effectivePrice !== p.price;
   const fav = has(p.id);
-  const productUrl = typeof window !== "undefined" ? window.location.href : "";
+  const soldOut = totalStock <= 0;
 
   function buy() {
     const sizeSel = size || (p.sizes.length === 1 ? p.sizes[0] : null);
     const colorSel = color || (p.colors.length === 1 ? p.colors[0] : null);
 
-    // 1. Abre o WhatsApp IMEDIATAMENTE (log nunca bloqueia)
     const msg = productWaMessage({
       siteName,
       productName: p.name,
@@ -82,9 +87,10 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
       price: effectivePrice,
       slug: p.slug,
     });
+    // 1. WhatsApp abre IMEDIATAMENTE
     window.open(waLink(waNumber(whatsapp), msg), "_blank", "noopener");
 
-    // 2. Registra o clique (fire-and-forget, direto via REST)
+    // 2. Logs fire-and-forget
     logEvent("wa_click", {
       product_id: p.id,
       metadata: { size: sizeSel, color: colorSel, price: effectivePrice, page: "product" },
@@ -110,23 +116,42 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
 
   function onToggleFav() {
     const adding = toggle(p.id);
-    toast(adding ? "Adicionado aos favoritos ♥" : "Removido dos favoritos");
+    toast(adding ? "Adicionado aos favoritos" : "Removido dos favoritos");
   }
 
   async function onShare() {
     logEvent("share", { product_id: p.id });
-    const result = await shareProduct(productUrl, `${p.name} · ${siteName}`);
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const result = await shareProduct(url, `${p.name} · ${siteName}`);
     if (result === "copied") toast("Link copiado!");
-    if (result === "failed") toast("Não foi possível compartilhar", "err");
+    if (result === "failed") toast("Não foi possível compartilhar", "error");
   }
 
   const installment = effectivePrice / 3;
+  const selectedStock = stockOf(size, color);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
-      <div className="grid gap-10 lg:grid-cols-2 lg:gap-12">
-        {/* ------- Galeria (1ª no mobile) ------- */}
-        <div>
+    <div className="mx-auto max-w-7xl px-5 pb-32 pt-8 lg:pb-16 lg:pt-14">
+      {/* Breadcrumb */}
+      <nav className="mb-8 hidden items-center gap-2 text-[12px] text-ink-faint lg:flex" aria-label="Localização">
+        <Link href="/" className="hover:text-ink">Home</Link>
+        <Icon name="chevronRight" size={11} />
+        <Link href="/catalogo" className="hover:text-ink">Catálogo</Link>
+        {p.categories && (
+          <>
+            <Icon name="chevronRight" size={11} />
+            <Link href={`/catalogo?cat=${p.categories.slug}`} className="hover:text-ink">
+              {p.categories.name}
+            </Link>
+          </>
+        )}
+        <Icon name="chevronRight" size={11} />
+        <span className="text-ink">{p.name}</span>
+      </nav>
+
+      <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+        {/* ═══ Galeria — sticky desktop ═══ */}
+        <div className="lg:sticky lg:top-24 lg:self-start">
           <div
             className="zoom-frame relative aspect-[3/4] cursor-zoom-in bg-sand"
             onClick={() => setZoom(true)}
@@ -143,9 +168,52 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
               sizes="(max-width: 1024px) 100vw, 50vw"
               className="object-cover"
             />
+            {p.is_new && (
+              <span className="absolute left-4 top-4 rounded-full bg-cream/95 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-ink">
+                Novo
+              </span>
+            )}
+            {/* Swipe no mobile */}
+            {gallery.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImgIdx((imgIdx - 1 + gallery.length) % gallery.length);
+                  }}
+                  className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-cream/85 text-ink shadow-card transition-opacity hover:bg-cream lg:hidden"
+                  aria-label="Foto anterior"
+                >
+                  <Icon name="chevronLeft" size={17} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImgIdx((imgIdx + 1) % gallery.length);
+                  }}
+                  className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-cream/85 text-ink shadow-card lg:hidden"
+                  aria-label="Próxima foto"
+                >
+                  <Icon name="chevronRight" size={17} />
+                </button>
+                {/* Indicadores mobile */}
+                <div className="absolute inset-x-0 bottom-4 flex justify-center gap-1.5 lg:hidden">
+                  {gallery.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        i === imgIdx ? "w-5 bg-cream" : "w-1.5 bg-cream/50"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
+
+          {/* Thumbnails — só desktop (mobile tem swipe) */}
           {gallery.length > 1 && (
-            <div className="mt-3 flex gap-3" role="tablist" aria-label="Fotos do produto">
+            <div className="mt-4 hidden gap-3 lg:flex" role="tablist" aria-label="Fotos do produto">
               {gallery.map((src, i) => (
                 <button
                   key={i}
@@ -153,62 +221,70 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
                   role="tab"
                   aria-selected={i === imgIdx}
                   aria-label={`Foto ${i + 1}`}
-                  className={`relative aspect-[3/4] w-16 overflow-hidden border-2 transition-colors sm:w-20 ${
-                    i === imgIdx ? "border-caramel" : "border-transparent opacity-70 hover:opacity-100"
+                  className={`relative aspect-[3/4] w-[74px] overflow-hidden border transition-all duration-200 ${
+                    i === imgIdx
+                      ? "border-gold-deep opacity-100"
+                      : "border-transparent opacity-60 hover:opacity-100"
                   }`}
                 >
-                  <Image src={src} alt="" fill sizes="80px" className="object-cover" />
+                  <Image src={src} alt="" fill sizes="74px" className="object-cover" />
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* ------- Info (2ª no mobile, logo após imagem) ------- */}
+        {/* ═══ Informações ═══ */}
         <div>
           {p.collections?.name && (
-            <p className="mb-2 text-[11px] uppercase tracking-[0.25em] text-caramel">
+            <p className="mb-3 flex items-center gap-3 text-[11px] uppercase tracking-[0.28em] text-gold-deep">
+              <span className="inline-block h-px w-6 bg-gold" aria-hidden />
               {p.collections.name}
               {p.collections.period_text ? ` · ${p.collections.period_text}` : ""}
             </p>
           )}
-          <h1 className="font-display text-3xl text-ink sm:text-4xl">{p.name}</h1>
+          <h1 className="font-display text-[32px] leading-tight text-ink sm:text-[44px]">{p.name}</h1>
           {p.short_description && (
-            <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">{p.short_description}</p>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-soft">{p.short_description}</p>
           )}
 
-          {/* Preço — logo após nome no mobile */}
-          <div className="mt-4 flex flex-wrap items-baseline gap-3">
+          {/* Preço */}
+          <div className="mt-6 flex flex-wrap items-baseline gap-3">
             {hasPromo ? (
               <>
-                <span className="text-2xl font-semibold text-caramel">{brl(effectivePrice)}</span>
-                <span className="text-sm text-ink-soft line-through">{brl(p.price)}</span>
-                <span className="rounded-full bg-caramel/10 px-2.5 py-1 text-xs font-semibold text-caramel">
+                <span className="font-display text-[32px] font-semibold text-wine">
+                  {brl(effectivePrice)}
+                </span>
+                <span className="text-[15px] text-ink-faint line-through">{brl(p.price)}</span>
+                <span className="rounded-full bg-gold-soft px-3 py-1 text-xs font-semibold text-gold-deep">
                   −{Math.round((1 - effectivePrice / p.price) * 100)}%
                 </span>
               </>
             ) : (
-              <span className="text-2xl font-semibold text-ink">{brl(p.price)}</span>
+              <span className="font-display text-[32px] font-semibold text-ink">{brl(p.price)}</span>
             )}
           </div>
-          <p className="mt-1 text-sm text-ink-soft">ou 3x de {brl(installment)} sem juros</p>
+          <p className="mt-1 text-[13.5px] text-ink-faint">
+            ou 3x de {brl(installment)} sem juros
+          </p>
 
-          {p.description && (
-            <p className="mt-6 whitespace-pre-line leading-relaxed text-ink-soft">{p.description}</p>
-          )}
-          {p.fabric && (
-            <p className="mt-3 text-sm text-ink-soft">
-              <span className="font-medium text-ink">Tecido:</span> {p.fabric}
-            </p>
-          )}
+          <div className="my-8 h-px bg-line" />
 
           {/* Tamanhos */}
           {p.sizes.length > 0 && (
-            <div className="mt-8">
-              <p className="mb-3 text-[11px] uppercase tracking-widest text-ink-soft">
-                Tamanho{size ? ` — ${size}` : ""}
-              </p>
-              <div className="flex flex-wrap gap-2">
+            <div className="mt-7">
+              <div className="mb-3 flex items-baseline justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-soft">
+                  Tamanho{size ? `: ${size}` : ""}
+                </p>
+                <Link
+                  href="/medidas"
+                  className="text-[12px] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+                >
+                  Guia de medidas
+                </Link>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
                 {p.sizes.map((s) => {
                   const st = stockOf(s, color);
                   const disabled = st <= 0;
@@ -218,12 +294,13 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
                       disabled={disabled}
                       onClick={() => setSize(size === s ? null : s)}
                       aria-pressed={size === s}
-                      className={`min-h-11 min-w-12 rounded-full border px-4 py-2.5 text-sm transition-all ${
+                      aria-label={`${s}${disabled ? " (sem estoque)" : ""}`}
+                      className={`min-h-12 min-w-14 rounded-lg border px-4 text-[14px] font-medium transition-all duration-150 active:scale-95 ${
                         disabled
-                          ? "cursor-not-allowed border-line text-ink-soft/30 line-through"
+                          ? "cursor-not-allowed border-line/60 text-ink-faint/40 line-through"
                           : size === s
                             ? "border-ink bg-ink text-cream"
-                            : "border-line hover:border-ink"
+                            : "border-line bg-paper text-ink hover:border-ink"
                       }`}
                     >
                       {s}
@@ -236,11 +313,11 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
 
           {/* Cores */}
           {p.colors.length > 0 && (
-            <div className="mt-6">
-              <p className="mb-3 text-[11px] uppercase tracking-widest text-ink-soft">
-                Cor{color ? ` — ${color}` : ""}
+            <div className="mt-7">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-soft">
+                Cor{color ? `: ${color}` : ""}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2.5">
                 {p.colors.map((c) => {
                   const st = stockOf(size, c);
                   const disabled = st <= 0;
@@ -250,12 +327,13 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
                       disabled={disabled}
                       onClick={() => setColor(color === c ? null : c)}
                       aria-pressed={color === c}
-                      className={`min-h-11 rounded-full border px-4 py-2.5 text-sm transition-all ${
+                      aria-label={`${c}${disabled ? " (sem estoque)" : ""}`}
+                      className={`min-h-12 rounded-lg border px-5 text-[14px] font-medium transition-all duration-150 active:scale-95 ${
                         disabled
-                          ? "cursor-not-allowed border-line text-ink-soft/30 line-through"
+                          ? "cursor-not-allowed border-line/60 text-ink-faint/40 line-through"
                           : color === c
                             ? "border-ink bg-ink text-cream"
-                            : "border-line hover:border-ink"
+                            : "border-line bg-paper text-ink hover:border-ink"
                       }`}
                     >
                       {c}
@@ -266,81 +344,156 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
             </div>
           )}
 
-          {/* Estoque */}
-          <p className="mt-6 text-sm" aria-live="polite">
-            {totalStock <= 0 ? (
-              <span className="font-medium text-ink-soft">Esgotado — volte logo, novidades chegam toda semana.</span>
+          {/* Estoque contextual */}
+          <p className="mt-7 min-h-6 text-[14px]" aria-live="polite">
+            {soldOut ? (
+              <span className="text-ink-soft">
+                Esgotado — novidades chegam toda semana, siga no Instagram.
+              </span>
+            ) : selectedStock > 0 && (size || color) ? (
+              <span className="font-medium text-moss">{selectedStock} em estoque nesta variação</span>
             ) : totalStock <= lowStock ? (
-              <span className="font-medium text-caramel">Últimas peças em estoque!</span>
+              <span className="font-medium text-wine">Últimas peças em estoque</span>
             ) : (
-              <span className="text-ink-soft">Em estoque</span>
+              <span className="text-ink-faint">Selecione tamanho e cor para ver disponibilidade</span>
             )}
           </p>
 
+          {/* CTAs desktop (mobile usa barra fixa) */}
+          <div className="mt-8 hidden gap-3 lg:flex">
+            <button
+              onClick={buy}
+              disabled={soldOut}
+              className="btn btn-solid min-h-14 flex-1 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Icon name="whatsapp" size={17} />
+              {soldOut ? "Produto esgotado" : "Comprar pelo WhatsApp"}
+            </button>
+            <FavShareButtons fav={fav} onToggleFav={onToggleFav} onShare={onShare} />
+          </div>
+
+          {/* Descrição */}
+          {p.description && (
+            <div className="mt-10">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-soft">
+                Sobre a peça
+              </p>
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-ink-soft">
+                {p.description}
+              </p>
+            </div>
+          )}
+          {p.fabric && (
+            <p className="mt-4 text-[14px] text-ink-soft">
+              <span className="font-medium text-ink">Tecido:</span> {p.fabric}
+            </p>
+          )}
+
           {p.size_chart && (
-            <details className="mt-5 rounded-xl border border-line bg-white/60 px-5 py-3.5 text-sm text-ink-soft">
-              <summary className="cursor-pointer font-medium text-ink">Medidas do modelo</summary>
-              <p className="mt-2">{p.size_chart}</p>
+            <details className="mt-6 rounded-xl border border-line bg-paper px-5 py-4 text-sm text-ink-soft">
+              <summary className="cursor-pointer text-[14px] font-medium text-ink">
+                Medidas do modelo
+              </summary>
+              <p className="mt-2.5 leading-relaxed">{p.size_chart}</p>
             </details>
           )}
 
-          {/* CTAs — sticky no mobile */}
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <button
-              onClick={buy}
-              disabled={totalStock <= 0}
-              className="min-h-13 flex-1 rounded-full bg-ink px-8 py-4 text-[12px] font-semibold uppercase tracking-widest text-cream transition-all hover:bg-caramel disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Comprar pelo WhatsApp
-            </button>
-            <div className="flex gap-3">
-              <button
-                onClick={onToggleFav}
-                aria-label={fav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-                aria-pressed={fav}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-full border px-6 py-4 text-[12px] font-semibold uppercase tracking-widest transition-all sm:flex-none ${
-                  fav ? "border-caramel bg-caramel/10 text-caramel" : "border-line text-ink hover:border-ink"
-                }`}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill={fav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                </svg>
-                {fav ? "Favorito" : "Favoritar"}
-              </button>
-              <button
-                onClick={onShare}
-                aria-label="Compartilhar produto"
-                className="flex items-center justify-center rounded-full border border-line px-4 py-4 text-ink transition-all hover:border-ink"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                  <circle cx="18" cy="5" r="3" />
-                  <circle cx="6" cy="12" r="3" />
-                  <circle cx="18" cy="19" r="3" />
-                  <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
-                </svg>
-              </button>
-            </div>
+          {/* Confiança */}
+          <div className="mt-10 grid gap-3 border-t border-line pt-8 text-[13.5px] text-ink-soft">
+            <p className="flex items-center gap-3">
+              <Icon name="whatsapp" size={16} className="text-moss" />
+              Atendimento e venda direto pelo WhatsApp {""}
+              — respondemos rápido.
+            </p>
+            <p className="flex items-center gap-3">
+              <Icon name="check" size={16} className="text-moss" />
+              Troca facilitada conforme nossa{" "}
+              <Link href="/medidas" className="underline underline-offset-2 hover:text-ink">
+                política de trocas
+              </Link>
+              .
+            </p>
           </div>
+        </div>
+      </div>
+
+      {/* Barra fixa mobile — CTA sempre acessível */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-cream/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md lg:hidden">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={onToggleFav}
+            aria-label={fav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+            aria-pressed={fav}
+            className={`grid h-12 w-12 flex-none place-items-center rounded-full border transition-colors ${
+              fav ? "border-wine bg-wine/5 text-wine" : "border-line text-ink"
+            }`}
+          >
+            <Icon name="heart" size={19} strokeWidth={fav ? 2 : 1.5} className={fav ? "fill-current" : ""} />
+          </button>
+          <button
+            onClick={buy}
+            disabled={soldOut}
+            className="btn btn-solid min-h-12 flex-1 !py-0 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Icon name="whatsapp" size={16} />
+            {soldOut ? "Esgotado" : "Comprar pelo WhatsApp"}
+          </button>
         </div>
       </div>
 
       {/* Zoom modal */}
       {zoom && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/90 p-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/92 p-4 sm:p-10"
           onClick={() => setZoom(false)}
           role="dialog"
           aria-modal="true"
           aria-label="Foto ampliada"
         >
-          <div className="relative h-[85vh] w-full max-w-3xl">
+          <div className="relative h-full max-h-[88vh] w-full max-w-4xl">
             <Image src={gallery[imgIdx]} alt={p.name} fill sizes="100vw" className="object-contain" />
           </div>
-          <button className="absolute right-6 top-6 text-3xl text-cream/80 hover:text-cream" aria-label="Fechar zoom">
-            ✕
+          <button
+            className="absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-cream/10 text-cream transition-colors hover:bg-cream/20"
+            aria-label="Fechar zoom"
+          >
+            <Icon name="x" size={20} />
           </button>
         </div>
       )}
     </div>
   );
+
+  function FavShareButtons({
+    fav,
+    onToggleFav,
+    onShare,
+  }: {
+    fav: boolean;
+    onToggleFav: () => void;
+    onShare: () => void;
+  }) {
+    return (
+      <div className="flex gap-3">
+        <button
+          onClick={onToggleFav}
+          aria-label={fav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+          aria-pressed={fav}
+          className={`flex items-center gap-2 rounded-full border px-6 text-[13px] font-medium transition-all active:scale-95 ${
+            fav ? "border-wine bg-wine/5 text-wine" : "border-line text-ink hover:border-ink"
+          }`}
+        >
+          <Icon name="heart" size={16} strokeWidth={fav ? 2 : 1.5} className={fav ? "fill-current" : ""} />
+          {fav ? "Favorito" : "Favoritar"}
+        </button>
+        <button
+          onClick={onShare}
+          aria-label="Compartilhar produto"
+          className="grid h-13 w-13 place-items-center rounded-full border border-line px-4 text-ink transition-all hover:border-ink active:scale-95"
+        >
+          <Icon name="external" size={16} />
+        </button>
+      </div>
+    );
+  }
 }

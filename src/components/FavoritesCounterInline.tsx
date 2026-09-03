@@ -8,7 +8,7 @@ export default function FavoritesCounterInline() {
   if (!ready || count === 0) return null;
   return (
     <span
-      className="absolute -right-2 -top-2 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-caramel px-1 text-[10px] font-bold text-white"
+      className="absolute -right-2 -top-2 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-wine px-1 text-[10px] font-bold text-white"
       aria-hidden
     >
       {count}
