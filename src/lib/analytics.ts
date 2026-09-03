@@ -1,7 +1,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./env";
 
-type EventType = "view" | "wa_click" | "favorite" | "share" | "search" | "filter";
+type EventType = "view" | "wa_click" | "favorite" | "share" | "search" | "filter" | "wa_order";
 
 /** Insere evento no banco. Fire-and-forget: nunca bloqueia nem lança. */
 export function logEvent(

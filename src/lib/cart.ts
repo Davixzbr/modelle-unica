@@ -70,9 +70,8 @@ export function buildOrderMessage(items: CartItem[]): string {
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const lines = ["Olá! Quero fazer um pedido:"];
   for (const it of items) {
-    const parts = [it.name];
-    if (it.size) parts.push(it.size);
-    if (it.color) parts.push(it.color);
+    const variation = [it.size, it.color].filter(Boolean).join(" / ");
+    const parts = [it.name, variation].filter(Boolean);
     lines.push(`• ${parts.join(" — ")} — ${it.qty}x ${fmt(it.price)}`);
   }
   lines.push(`Total: ${fmt(cartTotal(items))}`);

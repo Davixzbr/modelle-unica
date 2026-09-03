@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase-client";
 import { brl, productWaMessage, waLink, waNumber, shareProduct } from "@/lib/format";
 import { logEvent } from "@/lib/analytics";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useCart } from "@/hooks/useCart";
 import Icon from "@/components/Icon";
 import { toast } from "@/components/Toast";
 import type { Product, Variant } from "@/lib/types";
@@ -25,6 +26,7 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
   const [color, setColor] = useState<string | null>(null);
   const [zoom, setZoom] = useState(false);
   const { has, toggle } = useFavorites();
+  const { add } = useCart();
 
   const gallery = useMemo(() => {
     const imgs = [...p.images];
@@ -117,6 +119,39 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
   function onToggleFav() {
     const adding = toggle(p.id);
     toast(adding ? "Adicionado aos favoritos" : "Removido dos favoritos");
+  }
+
+  /** Seleção precisa escolher a variante exata quando há mais de 1 tamanho E 1 cor. */
+  const selectionIncomplete = p.sizes.length > 1 && p.colors.length > 1 && !(size && color);
+
+  function addToCart() {
+    if (soldOut) return;
+    if (selectionIncomplete) {
+      toast("Escolha tamanho e cor antes de adicionar", "warn");
+      return;
+    }
+    // Variante exata: match direto; senão, soma do estoque das variantes correspondentes
+    const exact = variants.find((v) => v.size === (size ?? "") && v.color === (color ?? ""));
+    const maxStock = exact
+      ? exact.stock
+      : stockOf(size || null, color || null);
+    if (maxStock <= 0) {
+      toast("Esta variação está esgotada", "warn");
+      return;
+    }
+    const result = add({
+      productId: p.id,
+      slug: p.slug,
+      name: p.name,
+      size: size || (p.sizes.length === 1 ? p.sizes[0] : ""),
+      color: color || (p.colors.length === 1 ? p.colors[0] : ""),
+      price: effectivePrice,
+      maxStock,
+      image: p.main_image || p.images[0] || null,
+    });
+    if (result === "added") toast("Adicionado ao carrinho ✓");
+    else if (result === "max") toast(`Você já tem o estoque máximo (${maxStock}) no carrinho`, "warn");
+    else toast("Peça esgotada", "warn");
   }
 
   async function onShare() {
@@ -362,6 +397,14 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
           {/* CTAs desktop (mobile usa barra fixa) */}
           <div className="mt-8 hidden gap-3 lg:flex">
             <button
+              onClick={addToCart}
+              disabled={soldOut}
+              className="btn btn-outline min-h-14 flex-1 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Icon name="package" size={17} />
+              {soldOut ? "Esgotado" : "Adicionar ao carrinho"}
+            </button>
+            <button
               onClick={buy}
               disabled={soldOut}
               className="btn btn-solid min-h-14 flex-1 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
@@ -436,7 +479,15 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
             className="btn btn-solid min-h-12 flex-1 !py-0 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="whatsapp" size={16} />
-            {soldOut ? "Esgotado" : "Comprar pelo WhatsApp"}
+            {soldOut ? "Esgotado" : "Comprar"}
+          </button>
+          <button
+            onClick={addToCart}
+            disabled={soldOut}
+            aria-label="Adicionar ao carrinho"
+            className="btn btn-outline h-12 w-12 flex-none !p-0 disabled:opacity-40"
+          >
+            <Icon name="package" size={18} />
           </button>
         </div>
       </div>
