@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import FavoritesCounterInline from "@/components/FavoritesCounterInline";
+import { CartHeaderLink } from "@/components/CartCounterInline";
 import Icon from "@/components/Icon";
 
 export default async function Header() {
@@ -58,6 +59,7 @@ export default async function Header() {
             <Icon name="heart" size={19} />
             <FavoritesCounterInline />
           </Link>
+          <CartHeaderLink />
           <a
             href="https://www.instagram.com/modelle_unica/"
             target="_blank"
