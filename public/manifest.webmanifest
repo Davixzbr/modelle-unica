@@ -1,0 +1,17 @@
+{
+  "name": "Modelle Única",
+  "short_name": "Modelle Única",
+  "description": "Moda fitness com curadoria autêntica. Peças selecionadas uma a uma — compre pelo WhatsApp.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#faf7f2",
+  "background_color": "#faf7f2",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, Fraunces } from "next/font/google";
 import "./globals.css";
+import SWRegister from "@/components/SWRegister";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -17,6 +18,7 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://modelleunica.com.br"),
+  manifest: "/manifest.webmanifest",
   title: {
     default: "Modelle Única — Moda fitness com curadoria autêntica",
     template: "%s · Modelle Única",
@@ -37,7 +39,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" className={`${outfit.variable} ${fraunces.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <SWRegister />
+      </body>
     </html>
   );
 }
