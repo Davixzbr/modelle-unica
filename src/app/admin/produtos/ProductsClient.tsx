@@ -207,6 +207,12 @@ export default function ProductsClient({
 
   return (
     <>
+      <div className="a-pagehead">
+        <div>
+          <h1>Produtos</h1>
+          <p>Seu catálogo — preços, estoque e status em um só lugar.</p>
+        </div>
+      </div>
       <ToastHost />
 
       <div className="a-toolbar">

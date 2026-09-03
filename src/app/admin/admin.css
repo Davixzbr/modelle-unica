@@ -722,6 +722,52 @@
 
 /* Toast admin reutiliza ToastHost da loja (visual claro) */
 
+/* ── Polimento fino ─────────────────────────────────────────── */
+.a-card,
+.a-stat,
+.a-tablewrap,
+.a-fieldset {
+  box-shadow: 0 1px 2px rgb(34 29 22 / 0.04), 0 8px 24px -16px rgb(34 29 22 / 0.1);
+}
+.a-btn {
+  box-shadow: 0 1px 2px rgb(34 29 22 / 0.12);
+}
+.a-btn.secondary,
+.a-btn.ghost {
+  box-shadow: none;
+}
+.a-menu {
+  animation: amenuin 0.14s ease;
+  transform-origin: top right;
+}
+@keyframes amenuin {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+.a-pagehead p {
+  margin-top: 6px;
+}
+.a-table th {
+  position: sticky;
+  top: 0;
+}
+.a-sidebar nav a {
+  position: relative;
+}
+.a-sidebar nav a.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--a-accent);
+}
+
 /* ── Responsivo ─────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .a-main {
