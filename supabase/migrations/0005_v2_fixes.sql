@@ -13,7 +13,7 @@ as $$
   select coalesce(
     (select true from auth.users u
      where u.id::text = nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'sub'
-       and u.email = 'davi@modelleunica.com.br'),
+       and u.email = 'modelleunica'),
     false
   );
 $$;
