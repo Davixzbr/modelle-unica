@@ -13,13 +13,21 @@ export type ZeroVariant = {
   products: { id: string; name: string; status: string } | null;
 };
 
+type StatsRow = {
+  day: string;
+  views: number;
+  wa_orders: number;
+  prev_views: number;
+  prev_wa_orders: number;
+};
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
   const supabase = await createClient();
   const site = await getSiteConfig();
 
-  const [prodRes, evRes, varRes] = await Promise.all([
+  const [prodRes, evRes, varRes, statsRes] = await Promise.all([
     supabase.rpc("admin_products_with_stock", {
       p_order: "views",
       p_asc: false,
@@ -35,11 +43,14 @@ export default async function AdminDashboard() {
       .select("id, product_id, size, color, stock, products!inner(id, name, status)")
       .lte("stock", 0)
       .limit(300),
+    // Séries 30d p/ gráficos (RPC com is_admin interno)
+    supabase.rpc("admin_stats_30d"),
   ]);
 
   const products = (prodRes.data as unknown as Product[]) || [];
   const events = evRes.data || [];
   const zeroVariants = (varRes.data as unknown as ZeroVariant[]) || [];
+  const stats = (statsRes.data as unknown as StatsRow[]) || [];
 
   return (
     <>
@@ -57,6 +68,7 @@ export default async function AdminDashboard() {
         events={events}
         lowStock={site.low_stock}
         zeroVariants={zeroVariants}
+        stats={stats}
       />
     </>
   );

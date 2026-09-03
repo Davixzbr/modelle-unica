@@ -45,6 +45,7 @@ export type Product = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  available_at?: string | null;
   total_stock: number;
   categories?: { name: string; slug: string } | null;
   collections?: { name: string; slug: string; period_text?: string } | null;

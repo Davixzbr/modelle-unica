@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import { fmtDate } from "@/lib/format";
+import { downloadCsv } from "@/lib/csv";
 import type { ClickLog } from "@/lib/types";
 
 export default function ClicksClient({ initial }: { initial: ClickLog[] }) {
@@ -69,6 +70,25 @@ export default function ClicksClient({ initial }: { initial: ClickLog[] }) {
         <span className="ml-auto text-[13px] text-[color:var(--a-muted)]">
           {filtered.length} registro(s)
         </span>
+        <button
+          className="a-btn secondary sm"
+          onClick={() =>
+            downloadCsv(
+              `cliques-whatsapp-${new Date().toISOString().slice(0, 10)}.csv`,
+              ["Data / hora", "Produto", "Tamanho", "Cor", "Origem"],
+              filtered.map((c) => [
+                fmtDate(c.created_at),
+                c.product_name || "",
+                c.size || "",
+                c.color || "",
+                c.source_page || "",
+              ])
+            )
+          }
+          disabled={filtered.length === 0}
+        >
+          <Icon name="download" size={14} /> Exportar CSV
+        </button>
       </div>
 
       {summary.length > 0 && (

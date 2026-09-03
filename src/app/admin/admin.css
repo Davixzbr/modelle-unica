@@ -465,6 +465,10 @@
   background: #fbeeed;
   color: var(--a-danger);
 }
+.a-badge.blue {
+  background: #e9eff5;
+  color: #31456e;
+}
 
 /* Toolbar de filtros */
 .a-toolbar {

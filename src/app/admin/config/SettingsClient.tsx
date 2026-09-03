@@ -4,7 +4,9 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase-client";
 import { toast } from "@/components/Toast";
 import ToastHost from "@/components/Toast";
+import Icon from "@/components/Icon";
 import type { SiteConfig } from "@/lib/site-config";
+import type { Depoimento } from "@/components/Testimonials";
 
 type Setting = { key: string; value: Record<string, unknown> };
 
@@ -12,16 +14,19 @@ const TABS = [
   { key: "loja", label: "Loja" },
   { key: "conteudo", label: "Conteúdo" },
   { key: "politicas", label: "Políticas" },
+  { key: "depoimentos", label: "Depoimentos" },
 ] as const;
 
 export default function SettingsClient({
   site,
   about,
   policy,
+  depoimentos,
 }: {
   site: SiteConfig;
   about: Record<string, unknown> | null;
   policy: Record<string, unknown> | null;
+  depoimentos: Depoimento[];
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("loja");
   const [siteForm, setSiteForm] = useState(site);
@@ -29,6 +34,7 @@ export default function SettingsClient({
   const [aboutText, setAboutText] = useState((about?.text as string) || "");
   const [policyTitle, setPolicyTitle] = useState((policy?.title as string) || "");
   const [policyText, setPolicyText] = useState((policy?.text as string) || "");
+  const [deps, setDeps] = useState<Depoimento[]>(depoimentos);
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -42,6 +48,7 @@ export default function SettingsClient({
       supabase
         .from("settings")
         .upsert({ key: "exchange_policy", value: { title: policyTitle, text: policyText } }),
+      supabase.from("settings").upsert({ key: "depoimentos", value: deps }),
     ]);
     const failed = results.some((r) => r.error);
     if (failed) toast("Não foi possível salvar as configurações.", "error");
@@ -54,6 +61,10 @@ export default function SettingsClient({
     onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
       setSiteForm((prev) => ({ ...prev, [k]: e.target.value })),
   });
+
+  function updateDep(i: number, patch: Partial<Depoimento>) {
+    setDeps((list) => list.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  }
 
   return (
     <>
@@ -170,6 +181,72 @@ export default function SettingsClient({
             <label>Texto</label>
             <textarea value={policyText} onChange={(e) => setPolicyText(e.target.value)} rows={5} />
           </div>
+        </div>
+      )}
+
+      {tab === "depoimentos" && (
+        <div className="a-card max-w-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[15px] font-semibold">Depoimentos de clientes</h2>
+            <span className="text-[12px] text-[color:var(--a-muted)]">{deps.length}/8</span>
+          </div>
+          <p className="a-helptext mb-4">
+            Aparecem na home, na seção “O que elas dizem”. Máximo de 8.
+          </p>
+          <div className="grid gap-4">
+            {deps.map((d, i) => (
+              <div key={i} className="rounded-xl border border-[color:var(--a-line)] p-4">
+                <div className="a-grid2">
+                  <div>
+                    <label>Nome</label>
+                    <input
+                      value={d.name}
+                      onChange={(e) => updateDep(i, { name: e.target.value })}
+                      maxLength={40}
+                    />
+                  </div>
+                  <div>
+                    <label>Estrelas (1–5)</label>
+                    <select
+                      value={d.rating}
+                      onChange={(e) => updateDep(i, { rating: Number(e.target.value) })}
+                    >
+                      {[5, 4, 3, 2, 1].map((n) => (
+                        <option key={n} value={n}>
+                          {"★".repeat(n)} ({n})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <label>Depoimento</label>
+                  <textarea
+                    value={d.text}
+                    onChange={(e) => updateDep(i, { text: e.target.value })}
+                    rows={3}
+                    maxLength={400}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] text-[color:var(--a-danger)]"
+                  onClick={() => setDeps((list) => list.filter((_, j) => j !== i))}
+                >
+                  <Icon name="trash" size={13} /> Remover
+                </button>
+              </div>
+            ))}
+          </div>
+          {deps.length < 8 && (
+            <button
+              type="button"
+              className="a-btn secondary mt-4"
+              onClick={() => setDeps((list) => [...list, { name: "", text: "", rating: 5 }])}
+            >
+              <Icon name="plus" size={14} /> Adicionar depoimento
+            </button>
+          )}
         </div>
       )}
     </>

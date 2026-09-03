@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Icon from "@/components/Icon";
+import AdminCharts, { type Stats30d } from "@/components/admin/AdminCharts";
 import type { Product } from "@/lib/types";
 import type { ZeroVariant } from "./page";
 
@@ -19,11 +20,13 @@ export default function DashboardClient({
   events,
   lowStock,
   zeroVariants = [],
+  stats = [],
 }: {
   products: Product[];
   events: EvRow[];
   lowStock: number;
   zeroVariants?: ZeroVariant[];
+  stats?: Stats30d[];
 }) {
   const [days, setDays] = useState<number>(7);
 
@@ -149,6 +152,15 @@ export default function DashboardClient({
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
+        {/* Gráficos 30d (SVG puro) */}
+        <section className="a-card lg:col-span-2">
+          <div className="a-cardtitle">
+            Últimos 30 dias
+            <span className="hint">comparativo vs. 30d anteriores</span>
+          </div>
+          <AdminCharts stats={stats} />
+        </section>
+
         {/* Estoque baixo com drill-down de variantes */}
         <section className="a-card">
           <div className="a-cardtitle">

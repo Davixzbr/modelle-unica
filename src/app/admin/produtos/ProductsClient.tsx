@@ -11,8 +11,11 @@ import { toast } from "@/components/Toast";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
 import type { Product } from "@/lib/types";
 import { brl } from "@/lib/format";
+import { downloadCsv } from "@/lib/csv";
 
 type Row = Product;
+
+const isScheduled = (r: Row) => !!r.available_at && new Date(r.available_at) > new Date();
 
 function ActionsMenu({
   row,
@@ -257,6 +260,27 @@ export default function ProductsClient({
         >
           Destaques
         </button>
+        <button
+          className="a-chip ml-auto"
+          onClick={() =>
+            downloadCsv(
+              `produtos-${new Date().toISOString().slice(0, 10)}.csv`,
+              ["Nome", "Categoria", "Preço", "Promoção", "Estoque", "Status", "Criado em"],
+              filtered.map((r) => [
+                r.name,
+                r.categories?.name || "",
+                r.price.toFixed(2).replace(".", ","),
+                r.promo_price != null ? r.promo_price.toFixed(2).replace(".", ",") : "",
+                r.total_stock ?? 0,
+                r.status === "active" ? "Ativo" : r.status === "draft" ? "Rascunho" : "Pausado",
+                r.created_at ? new Date(r.created_at).toLocaleDateString("pt-BR") : "",
+              ])
+            )
+          }
+          disabled={filtered.length === 0}
+        >
+          <Icon name="download" size={13} /> CSV
+        </button>
         {hasFilters && (
           <button
             className="a-chip"
@@ -351,6 +375,7 @@ export default function ProductsClient({
                     <Link href={`/admin/produtos/${r.id}`} className="hover:underline">
                       {r.name}
                     </Link>
+                    {isScheduled(r) && <span className="a-badge blue ml-2">Agendado</span>}
                     {r.is_new && <span className="a-badge amber ml-2">NOVO</span>}
                   </td>
                   <td className="text-[color:var(--a-muted)]">{r.categories?.name || "—"}</td>
@@ -431,6 +456,7 @@ export default function ProductsClient({
                 )}
               </div>
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                {isScheduled(r) && <span className="a-badge blue">Agendado</span>}
                 {stockBadge(r)}
                 <span
                   className={`a-badge ${

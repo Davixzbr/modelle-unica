@@ -65,6 +65,9 @@ export default function ProductForm({ product, variants, categories, collections
   const [status, setStatus] = useState<Product["status"]>(product?.status || "active");
   const [featured, setFeatured] = useState(product?.featured || false);
   const [isNewFlag, setIsNewFlag] = useState(product?.is_new ?? isNew);
+  const [availableAt, setAvailableAt] = useState(
+    product?.available_at ? new Date(product.available_at).toISOString().slice(0, 16) : ""
+  );
 
   // ── SEO ──────────────────────────────────────────────────────
   const [metaTitle, setMetaTitle] = useState(product?.meta_title || "");
@@ -209,6 +212,7 @@ export default function ProductForm({ product, variants, categories, collections
       featured,
       is_new: isNewFlag,
       status,
+      available_at: availableAt ? new Date(availableAt).toISOString() : null,
       meta_title: metaTitle.trim() || null,
       meta_description: metaDescription.trim() || null,
     };
@@ -740,6 +744,24 @@ export default function ProductForm({ product, variants, categories, collections
                   <option value="draft">Rascunho (oculto)</option>
                   <option value="inactive">Inativo</option>
                 </select>
+                <label htmlFor="p-available-at" className="mt-4 block">
+                  Publicar em <span className="opacity-60">(opcional — deixa a peça pronta, invisível até a data)</span>
+                </label>
+                <input
+                  id="p-available-at"
+                  type="datetime-local"
+                  value={availableAt}
+                  onChange={(e) => setAvailableAt(e.target.value)}
+                />
+                {availableAt && (
+                  <button
+                    type="button"
+                    className="mt-1.5 text-[12px] text-[color:var(--a-muted)] underline underline-offset-2"
+                    onClick={() => setAvailableAt("")}
+                  >
+                    Remover agendamento
+                  </button>
+                )}
               </div>
             )}
           </div>
