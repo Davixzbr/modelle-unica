@@ -532,20 +532,20 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
             <Icon name="heart" size={19} strokeWidth={fav ? 2 : 1.5} className={fav ? "fill-current" : ""} />
           </button>
           <button
-            onClick={buy}
-            disabled={soldOut}
-            className="btn btn-solid min-h-12 flex-1 !py-0 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Icon name="whatsapp" size={16} />
-            {soldOut ? "Esgotado" : "Comprar"}
-          </button>
-          <button
             onClick={addToCart}
             disabled={soldOut}
             aria-label="Adicionar ao carrinho"
             className="btn btn-outline h-12 w-12 flex-none !p-0 disabled:opacity-40"
           >
             <Icon name="package" size={18} />
+          </button>
+          <button
+            onClick={buy}
+            disabled={soldOut}
+            className="btn btn-solid min-h-12 flex-1 !py-0 !text-[13px] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Icon name="whatsapp" size={16} />
+            {soldOut ? "Esgotado" : "Comprar"}
           </button>
         </div>
       </div>
