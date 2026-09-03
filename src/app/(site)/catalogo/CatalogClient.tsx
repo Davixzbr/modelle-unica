@@ -604,6 +604,15 @@ function BottomSheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  // ESC fecha o drawer
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]" onClick={onClose} />
