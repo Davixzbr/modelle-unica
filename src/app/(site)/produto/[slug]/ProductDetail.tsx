@@ -11,6 +11,8 @@ import { useCart } from "@/hooks/useCart";
 import Icon from "@/components/Icon";
 import { toast } from "@/components/Toast";
 import Swatch from "@/components/Swatch";
+import Lightbox from "@/components/Lightbox";
+import MedidasModal from "@/components/MedidasModal";
 import type { Product, Variant } from "@/lib/types";
 
 type Props = {
@@ -25,7 +27,9 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
   const [imgIdx, setImgIdx] = useState(0);
   const [size, setSize] = useState<string | null>(null);
   const [color, setColor] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
+  const [medidas, setMedidas] = useState(false);
+  const [policy, setPolicy] = useState<{ title?: string; text?: string } | null>(null);
   const { has, toggle } = useFavorites();
   const { add } = useCart();
 
@@ -163,6 +167,37 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
     if (result === "failed") toast("Não foi possível compartilhar", "error");
   }
 
+  /** Avise-me: WhatsApp com msg pré-montada + evento restock_interest. */
+  function notifyMe() {
+    const sizeSel = size || (p.sizes.length === 1 ? p.sizes[0] : null);
+    const colorSel = color || (p.colors.length === 1 ? p.colors[0] : null);
+    const parts = [p.name, sizeSel, colorSel].filter(Boolean).join(" — ");
+    const msg = `Olá! Quero ser avisada quando o ${parts} voltar ao estoque.`;
+    window.open(waLink(waNumber(whatsapp), msg), "_blank", "noopener");
+    logEvent("restock_interest", {
+      product_id: p.id,
+      metadata: { size: sizeSel, color: colorSel },
+    });
+    toast("Avisamos você quando chegar!");
+  }
+
+  async function openMedidas() {
+    setMedidas(true);
+    if (!policy) {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("settings")
+          .select("value")
+          .eq("key", "exchange_policy")
+          .single();
+        setPolicy((data?.value as { title?: string; text?: string }) || null);
+      } catch {
+        setPolicy(null);
+      }
+    }
+  }
+
   const installment = effectivePrice / 3;
   const selectedStock = stockOf(size, color);
 
@@ -190,10 +225,10 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
         <div className="lg:sticky lg:top-24 lg:self-start">
           <div
             className="zoom-frame relative aspect-[3/4] cursor-zoom-in bg-sand"
-            onClick={() => setZoom(true)}
+            onClick={() => setLightbox(true)}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && setZoom(true)}
+            onKeyDown={(e) => e.key === "Enter" && setLightbox(true)}
             aria-label="Ampliar foto"
           >
             <Image
@@ -313,12 +348,12 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-soft">
                   Tamanho{size ? `: ${size}` : ""}
                 </p>
-                <Link
-                  href="/medidas"
+                <button
+                  onClick={openMedidas}
                   className="text-[12px] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
                 >
-                  Guia de medidas
-                </Link>
+                  Não sabe seu tamanho? Veja o guia
+                </button>
               </div>
               <div className="flex flex-wrap gap-2.5">
                 {p.sizes.map((s) => {
@@ -395,6 +430,17 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
               <span className="text-ink-faint">Selecione tamanho e cor para ver disponibilidade</span>
             )}
           </p>
+
+          {/* Avise-me — só quando a variação selecionada está esgotada */}
+          {!soldOut && size && color && selectedStock <= 0 && (
+            <button
+              onClick={notifyMe}
+              className="btn btn-outline mt-4 min-h-12 w-full !text-[13px] !border-wine/40 !text-wine hover:!border-wine"
+            >
+              <Icon name="bell" size={16} />
+              Avise-me quando chegar: {size}/{color}
+            </button>
+          )}
 
           {/* CTAs desktop (mobile usa barra fixa) */}
           <div className="mt-8 hidden gap-3 lg:flex">
@@ -494,26 +540,18 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
         </div>
       </div>
 
-      {/* Zoom modal */}
-      {zoom && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/92 p-4 sm:p-10"
-          onClick={() => setZoom(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Foto ampliada"
-        >
-          <div className="relative h-full max-h-[88vh] w-full max-w-4xl">
-            <Image src={gallery[imgIdx]} alt={p.name} fill sizes="100vw" className="object-contain" />
-          </div>
-          <button
-            className="absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full bg-cream/10 text-cream transition-colors hover:bg-cream/20"
-            aria-label="Fechar zoom"
-          >
-            <Icon name="x" size={20} />
-          </button>
-        </div>
+      {/* Lightbox fullscreen */}
+      {lightbox && (
+        <Lightbox
+          images={gallery}
+          alt={p.name}
+          index={imgIdx}
+          onClose={() => setLightbox(false)}
+        />
       )}
+
+      {/* Guia de medidas em modal */}
+      {medidas && <MedidasModal policy={policy} onClose={() => setMedidas(false)} />}
     </div>
   );
 

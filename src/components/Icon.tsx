@@ -52,6 +52,7 @@ const PATHS: Record<string, string> = {
   filter: "M4 5h16M7 12h10M10 19h4",
   drag: "M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v5l3 3",
+  bell: "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0",
   package: "m7.5 4.3 9 5.1M21 8l-9-5-9 5v8l9 5 9-5V8Zm-9-2.5v16M3.3 8.3 12 13.2l8.7-4.9",
 };
 
