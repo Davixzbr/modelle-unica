@@ -38,6 +38,7 @@ const COLOR_MAP: Record<string, string> = {
   "off white": "#f1ece2",
   "off-white": "#f1ece2",
   nude: "#d8b9a6",
+  creme: "#f1ece2",
   caqui: "#a89570",
   estampado: "#c9b8a3",
   estampa: "#c9b8a3",
@@ -49,12 +50,13 @@ const COLOR_MAP: Record<string, string> = {
 /** Fallback neutro (tom areia) p/ cor desconhecida. */
 export const FALLBACK_COLOR = "#c9b8a3";
 
-/** Normaliza nome: minúsculas, sem acentos, espaços simples. */
+/** Normaliza nome: minúsculas, sem acentos, hífen→espaço, espaços simples. */
 export function normalizeColorName(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/-/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

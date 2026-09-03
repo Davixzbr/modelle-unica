@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import Icon from "@/components/Icon";
+import QuickView from "@/components/QuickView";
 import { brl } from "@/lib/format";
 import { useFavorites } from "@/hooks/useFavorites";
 import type { Product } from "@/lib/types";
@@ -97,6 +98,7 @@ export default function ProductCard({ p, lowStock = 2 }: { p: Product; lowStock?
   const soldOut = total <= 0;
   const hoverImage = p.images.length > 1 ? p.images[1] : null;
   const [hover, setHover] = useState(false);
+  const [quick, setQuick] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const badges = cardBadges(p);
 
@@ -142,6 +144,22 @@ export default function ProductCard({ p, lowStock = 2 }: { p: Product; lowStock?
         <div className="absolute right-3 top-3">
           <FavoriteButton product={p} size="sm" />
         </div>
+        {/* Ver rápido — não entra no Link (pointer-events próprios) */}
+        {!soldOut && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setQuick(true);
+            }}
+            aria-label={`Ver rápido ${p.name}`}
+            className="absolute inset-x-3 bottom-3 z-10 flex min-h-10 translate-y-1 items-center justify-center gap-2 rounded-full bg-cream/95 text-[12px] font-semibold uppercase tracking-[0.14em] text-ink opacity-0 shadow-card backdrop-blur-sm transition-all duration-200 hover:bg-cream focus-visible:opacity-100 focus-visible:translate-y-0 active:scale-95 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 max-lg:opacity-100 max-lg:translate-y-0"
+          >
+            <Icon name="search" size={14} />
+            Ver rápido
+          </button>
+        )}
+        {quick && <QuickView product={p} onClose={() => setQuick(false)} />}
         {soldOut && (
           <div className="absolute inset-0 grid place-items-center bg-cream/40">
             <span className="rounded-full bg-ink/85 px-5 py-2 text-[10.5px] font-semibold uppercase tracking-[0.2em] text-cream backdrop-blur-sm">

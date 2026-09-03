@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/States";
 
-/** Skeleton da página de produto (primeiro load / navegação). */
-export default function Loading() {
+/** Skeleton do detalhe do produto (usado no Suspense da página). */
+export default function ProductDetailSkeleton() {
   return (
     <div className="mx-auto max-w-7xl px-5 pb-32 pt-8 lg:pb-16 lg:pt-14" aria-busy="true" aria-label="Carregando produto">
       <Skeleton className="mb-8 h-3 w-48" />

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import FavoritesCounterInline from "@/components/FavoritesCounterInline";
 import { CartHeaderLink } from "@/components/CartCounterInline";
+import HeaderSearch from "@/components/HeaderSearch";
 import Icon from "@/components/Icon";
 
 export default async function Header() {
@@ -44,13 +45,7 @@ export default async function Header() {
 
         {/* Ações */}
         <div className="flex items-center gap-1.5">
-          <Link
-            href="/catalogo"
-            aria-label="Buscar no catálogo"
-            className="grid h-10 w-10 place-items-center rounded-full text-ink transition-colors hover:bg-sand"
-          >
-            <Icon name="search" size={19} />
-          </Link>
+          <HeaderSearch />
           <Link
             href="/favoritos"
             aria-label="Favoritos"
