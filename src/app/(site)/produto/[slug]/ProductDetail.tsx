@@ -172,8 +172,8 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
   function notifyMe() {
     const sizeSel = size || (p.sizes.length === 1 ? p.sizes[0] : null);
     const colorSel = color || (p.colors.length === 1 ? p.colors[0] : null);
-    const parts = [p.name, sizeSel, colorSel].filter(Boolean).join(" — ");
-    const msg = `Olá! Quero ser avisada quando o ${parts} voltar ao estoque.`;
+    const variant = [sizeSel, colorSel].filter(Boolean).join("/");
+    const msg = `Olá! Quero ser avisada quando o ${p.name} — ${variant} voltar ao estoque.`;
     window.open(waLink(waNumber(whatsapp), msg), "_blank", "noopener");
     logEvent("restock_interest", {
       product_id: p.id,
