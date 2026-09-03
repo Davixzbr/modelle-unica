@@ -13,6 +13,7 @@ import { toast } from "@/components/Toast";
 import Swatch from "@/components/Swatch";
 import Lightbox from "@/components/Lightbox";
 import MedidasModal from "@/components/MedidasModal";
+import { TrustBadges } from "@/components/Testimonials";
 import type { Product, Variant } from "@/lib/types";
 
 type Props = {
@@ -315,6 +316,12 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
             </p>
           )}
           <h1 className="font-display text-[32px] leading-tight text-ink sm:text-[44px]">{p.name}</h1>
+          {p.favorites_count > 0 && (
+            <p className="mt-2.5 flex items-center gap-1.5 text-[13px] text-ink-faint">
+              <Icon name="heart" size={13} className="text-wine" />
+              {p.favorites_count} {p.favorites_count === 1 ? "pessoa favoritou" : "pessoas favoritaram"} esta peça
+            </p>
+          )}
           {p.short_description && (
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-soft">{p.short_description}</p>
           )}
@@ -505,6 +512,9 @@ export default function ProductDetail({ product: p, variants, siteName, whatsapp
               .
             </p>
           </div>
+
+          {/* Selos de confiança */}
+          <TrustBadges variant="product" />
         </div>
       </div>
 

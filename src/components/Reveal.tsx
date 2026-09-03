@@ -2,15 +2,17 @@
 
 import { useEffect, useRef } from "react";
 
-/** Revela elementos .reveal ao rolar (fade-in suave). */
+/** Revela elementos .reveal ao rolar (fade-in suave). `delayMs` p/ stagger. */
 export default function Reveal({
   children,
   className = "",
   as: Tag = "div",
+  delayMs = 0,
 }: {
   children: React.ReactNode;
   className?: string;
   as?: "div" | "section" | "article" | "header";
+  delayMs?: number;
 }) {
   const ref = useRef<HTMLElement | null>(null);
 
@@ -34,7 +36,7 @@ export default function Reveal({
 
   return (
     // @ts-expect-error dynamic tag
-    <Tag ref={ref} className={`reveal ${className}`}>
+    <Tag ref={ref} className={`reveal ${className}`} style={delayMs ? { transitionDelay: `${delayMs}ms` } : undefined}>
       {children}
     </Tag>
   );
