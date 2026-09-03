@@ -1,0 +1,134 @@
+/* Painel admin — visual funcional/dashboard, distinto da vitrine */
+
+.admin-root {
+  --a-bg: #f4f5f7;
+  --a-card: #ffffff;
+  --a-border: #e4e7ec;
+  --a-text: #1a202c;
+  --a-muted: #667085;
+  --a-accent: #9c6b32;
+  font-family: "Outfit", system-ui, sans-serif;
+  background: var(--a-bg);
+  color: var(--a-text);
+  min-height: 100vh;
+  font-size: 14px;
+}
+
+.admin-root h1, .admin-root h2, .admin-root h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Sidebar */
+.a-sidebar {
+  width: 220px;
+  background: #1a202c;
+  color: #cbd2dc;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+}
+.a-sidebar a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  color: #cbd2dc;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.a-sidebar a:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.a-sidebar a.active { background: rgba(255,255,255,0.08); color: #fff; border-left-color: var(--a-accent); }
+
+/* Cards e conteúdo */
+.a-main { margin-left: 220px; padding: 28px 32px; max-width: 1200px; }
+.a-card {
+  background: var(--a-card);
+  border: 1px solid var(--a-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.a-stat {
+  background: var(--a-card);
+  border: 1px solid var(--a-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.a-stat .num { font-size: 26px; font-weight: 700; }
+.a-stat .lbl { color: var(--a-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* Tabela */
+.a-table { width: 100%; border-collapse: collapse; background: var(--a-card); border: 1px solid var(--a-border); border-radius: 12px; overflow: hidden; }
+.a-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--a-muted); padding: 12px 16px; background: #f9fafb; border-bottom: 1px solid var(--a-border); }
+.a-table td { padding: 12px 16px; border-bottom: 1px solid var(--a-border); vertical-align: middle; }
+.a-table tr:last-child td { border-bottom: 0; }
+.a-table tr:hover td { background: #fafbfc; }
+
+/* Inputs */
+.admin-root input, .admin-root textarea, .admin-root select {
+  border: 1px solid var(--a-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  width: 100%;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.admin-root input:focus, .admin-root textarea:focus, .admin-root select:focus { border-color: var(--a-accent); }
+.admin-root label { font-size: 12px; font-weight: 600; color: var(--a-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 5px; }
+
+/* Botões */
+.a-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--a-accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.a-btn:hover { filter: brightness(0.92); }
+.a-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.a-btn.secondary { background: #fff; color: var(--a-text); border: 1px solid var(--a-border); }
+.a-btn.danger { background: #d92d20; }
+.a-btn.ghost { background: transparent; color: var(--a-muted); border: 1px dashed var(--a-border); }
+
+/* Badges */
+.a-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.a-badge.green { background: #ecfdf3; color: #067647; }
+.a-badge.gray { background: #f2f4f7; color: #475467; }
+.a-badge.amber { background: #fffaeb; color: #b54708; }
+.a-badge.red { background: #fef3f2; color: #b42318; }
+
+/* Login */
+.a-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #1a202c 0%, #2b2118 100%);
+}
+.a-login .box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px;
+  width: 380px;
+  max-width: 92vw;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+}
+
+@media (max-width: 900px) {
+  .a-sidebar { position: static; width: 100%; flex-direction: row; overflow-x: auto; min-height: 0; }
+  .a-sidebar a { border-left: 0; border-bottom: 3px solid transparent; white-space: nowrap; }
+  .a-sidebar a.active { border-left-color: transparent; border-bottom-color: var(--a-accent); }
+  .a-main { margin-left: 0; padding: 20px 16px; }
+}

@@ -1,0 +1,44 @@
+export type Categorie = { id: string; name: string; slug: string; sort_order: number };
+export type Collection = { id: string; name: string; slug: string; description: string | null; active: boolean };
+export type Product = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  fabric: string;
+  size_chart: string;
+  category_id: string | null;
+  collection_id: string | null;
+  price: number;
+  promo_price: number | null;
+  sizes: string[];
+  colors: string[];
+  images: string[];
+  tags: string[];
+  featured: boolean;
+  status: "active" | "draft" | "inactive";
+  views: number;
+  sort_order: number;
+  created_at: string;
+  categories?: { name: string; slug: string } | null;
+  collections?: { name: string; slug: string } | null;
+  variant_stocks?: { total_stock: number }[];
+};
+export type Banner = {
+  id: string;
+  title: string;
+  subtitle: string;
+  image_url: string;
+  link_url: string;
+  sort_order: number;
+  active: boolean;
+};
+export type Variant = { id: string; product_id: string; size: string; color: string; stock: number };
+export type ClickLog = {
+  id: string;
+  product_name: string | null;
+  size: string | null;
+  color: string | null;
+  source_page: string;
+  created_at: string;
+};
