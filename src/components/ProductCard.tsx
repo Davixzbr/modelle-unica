@@ -9,14 +9,14 @@ const TAG_LABEL: Record<string, string> = {
   exclusivo: "Exclusivo",
 };
 
-export function StockBadge({ stock }: { stock: number }) {
+export function StockBadge({ stock, low }: { stock: number; low: number }) {
   if (stock <= 0)
     return (
       <span className="rounded-full bg-ink/80 px-3 py-1 text-[11px] font-medium tracking-wide text-cream">
         Esgotado
       </span>
     );
-  if (stock <= 4)
+  if (stock <= low)
     return (
       <span className="rounded-full bg-caramel px-3 py-1 text-[11px] font-medium tracking-wide text-white">
         Últimas peças
@@ -25,21 +25,23 @@ export function StockBadge({ stock }: { stock: number }) {
   return null;
 }
 
-export default function ProductCard({ p }: { p: Product }) {
+export default function ProductCard({ p, lowStock = 2 }: { p: Product; lowStock?: number }) {
   const total = p.variant_stocks?.[0]?.total_stock ?? 0;
   const hasPromo = p.promo_price != null && p.promo_price < p.price;
+  const soldOut = total <= 0;
 
   return (
     <Link
       href={`/produto/${p.slug}`}
-      className="group block"
-      aria-label={`Ver ${p.name}`}
+      className={`group block transition-opacity ${soldOut ? "opacity-75" : ""}`}
+      aria-label={soldOut ? `${p.name} (esgotado)` : `Ver ${p.name}`}
     >
       <div className="zoom-frame relative aspect-[3/4] w-full bg-sand">
         <Image
-          src={p.images[0] || "/images/look-001.jpg"}
+          src={p.main_image || p.images[0] || "/images/look-001.jpg"}
           alt={p.name}
           fill
+          loading="lazy"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           className="object-cover"
         />
@@ -52,22 +54,35 @@ export default function ProductCard({ p }: { p: Product }) {
               {TAG_LABEL[t] || t}
             </span>
           ))}
+          {p.is_new && !p.tags.includes("novo") && (
+            <span className="rounded-full bg-cream/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-ink">
+              Novo
+            </span>
+          )}
         </div>
         <div className="absolute right-3 top-3">
-          <StockBadge stock={total} />
+          <StockBadge stock={total} low={lowStock} />
         </div>
+        {soldOut && (
+          <div className="absolute inset-0 flex items-center justify-center bg-cream/30">
+            <span className="rounded-full bg-ink px-5 py-2 text-[11px] font-semibold uppercase tracking-widest text-cream">
+              Esgotado
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="pt-3">
         <h3 className="font-display text-[15px] leading-snug text-ink transition-colors group-hover:text-caramel">
           {p.name}
         </h3>
+        {p.short_description && (
+          <p className="mt-0.5 line-clamp-1 text-xs text-ink-soft">{p.short_description}</p>
+        )}
         <p className="mt-1 flex items-baseline gap-2">
           {hasPromo ? (
             <>
-              <span className="text-sm font-semibold text-caramel">
-                {brl(p.promo_price!)}
-              </span>
+              <span className="text-sm font-semibold text-caramel">{brl(p.promo_price!)}</span>
               <span className="text-xs text-ink-soft line-through">{brl(p.price)}</span>
             </>
           ) : (

@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WhatsFloat from "@/components/WhatsFloat";
+import ToastHost from "@/components/Toast";
 import { getSiteConfig } from "@/lib/site-config";
 
 export default async function SiteLayout({
@@ -19,6 +20,7 @@ export default async function SiteLayout({
         number={site.whatsapp}
         message={`Olá, ${site.name}! Vim pelo site e gostaria de mais informações.`}
       />
+      <ToastHost />
     </>
   );
 }

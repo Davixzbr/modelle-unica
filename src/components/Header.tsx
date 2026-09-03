@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
+import FavoritesCounterInline from "@/components/FavoritesCounterInline";
 
 export default async function Header() {
   const supabase = await createClient();
@@ -40,11 +41,12 @@ export default async function Header() {
           <Link
             href="/favoritos"
             aria-label="Favoritos"
-            className="text-ink transition-colors hover:text-caramel"
+            className="relative text-ink transition-colors hover:text-caramel"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
+            <FavoritesCounterInline />
           </Link>
           <Link
             href="https://www.instagram.com/modelle_unica/"

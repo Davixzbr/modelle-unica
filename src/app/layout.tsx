@@ -1,5 +1,19 @@
 import type { Metadata } from "next";
+import { Outfit, Fraunces } from "next/font/google";
 import "./globals.css";
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  style: ["normal", "italic"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://modelleunica.com.br"),
@@ -22,15 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Outfit:wght@300..700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="pt-BR" className={`${outfit.variable} ${fraunces.variable}`}>
       <body>{children}</body>
     </html>
   );

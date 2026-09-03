@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
-import { slugify } from "@/lib/format";
+import { slugify, compressImage } from "@/lib/format";
+import { toast } from "@/components/Toast";
+import { Spinner } from "@/components/States";
 import type { Product, Variant, Categorie, Collection } from "@/lib/types";
 
 type Props = {
@@ -18,73 +20,111 @@ type Props = {
 const TAG_OPTIONS = ["novo", "promocao", "exclusivo"];
 const SIZE_PRESETS = ["P", "M", "G", "GG"];
 
+type StockGrid = Record<string, number>; // "size||color" -> stock
+
 export default function ProductForm({ product, variants, categories, collections }: Props) {
   const router = useRouter();
   const isNew = !product;
 
+  // ---- Seção: informações ----
   const [name, setName] = useState(product?.name || "");
+  const [autoSlug] = useState(isNew);
   const [slug, setSlug] = useState(product?.slug || "");
+  const [shortDescription, setShortDescription] = useState(product?.short_description || "");
   const [description, setDescription] = useState(product?.description || "");
   const [fabric, setFabric] = useState(product?.fabric || "");
   const [sizeChart, setSizeChart] = useState(product?.size_chart || "");
   const [categoryId, setCategoryId] = useState(product?.category_id || "");
   const [collectionId, setCollectionId] = useState(product?.collection_id || "");
+  const [tags, setTags] = useState<string[]>(product?.tags || []);
+  const [status, setStatus] = useState<Product["status"]>(product?.status || "active");
+  const [featured, setFeatured] = useState(product?.featured || false);
+  const [isNewFlag, setIsNewFlag] = useState(product?.is_new ?? isNew);
+
+  // ---- Seção: preço ----
   const [price, setPrice] = useState(product?.price?.toString() || "");
   const [promoPrice, setPromoPrice] = useState(product?.promo_price?.toString() || "");
+
+  // ---- Seção: imagens ----
+  const [images, setImages] = useState<string[]>(product?.images || []);
+  const [uploading, setUploading] = useState(false);
+
+  // ---- Seção: variantes ----
   const [sizes, setSizes] = useState<string[]>(product?.sizes || SIZE_PRESETS);
   const [colors, setColors] = useState<string[]>(product?.colors || []);
-  const [tags, setTags] = useState<string[]>(product?.tags || []);
-  const [featured, setFeatured] = useState(product?.featured || false);
-  const [status, setStatus] = useState<Product["status"]>(product?.status || "active");
-  const [images, setImages] = useState<string[]>(product?.images || []);
-  const [stocks, setStocks] = useState<Record<string, number>>(() => {
-    const m: Record<string, number> = {};
+  const [stocks, setStocks] = useState<StockGrid>(() => {
+    const m: StockGrid = {};
     variants.forEach((v) => {
       m[`${v.size}||${v.color}`] = v.stock;
     });
     return m;
   });
 
-  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const stockKey = (s: string, c: string) => `${s}||${c}`;
   const stockOf = (s: string, c: string) => stocks[stockKey(s, c)] ?? 0;
   const setStockOf = (s: string, c: string, v: number) =>
-    setStocks((prev) => ({ ...prev, [stockKey(s, c)]: v }));
+    setStocks((prev) => ({ ...prev, [stockKey(s, c)]: Math.max(0, Math.round(v) || 0) }));
 
-  const totalStock = Object.entries(stocks)
-    .filter(([k]) => {
-      const [ks, kc] = k.split("||");
-      return sizes.includes(ks) && colors.includes(kc);
-    })
-    .reduce((sum, [, v]) => sum + v, 0);
+  const totalStock = useMemo(
+    () =>
+      sizes.reduce(
+        (sum, s) => sum + (colors.length ? colors : [""]).reduce((acc, c) => acc + stockOf(s, c), 0),
+        0
+      ),
+    [sizes, colors, stocks] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const promoInvalid =
+    promoPrice !== "" && price !== "" && Number(promoPrice) >= Number(price);
+  const hasDiscount = promoPrice !== "" && !promoInvalid && Number(promoPrice) > 0;
+  const discountPct =
+    hasDiscount && Number(price) > 0
+      ? Math.round((1 - Number(promoPrice) / Number(price)) * 100)
+      : 0;
+
+  function validate(): string[] {
+    const errs: string[] = [];
+    if (!name.trim()) errs.push("Nome é obrigatório.");
+    if (!price || Number(price) <= 0) errs.push("Informe um preço válido.");
+    if (promoInvalid) errs.push("Preço promocional deve ser menor que o preço normal.");
+    if (sizes.length === 0) errs.push("Selecione ao menos um tamanho.");
+    if (colors.length === 0) errs.push("Adicione ao menos uma cor.");
+    if (images.length === 0) errs.push("Envie ao menos uma foto do produto.");
+    return errs;
+  }
 
   async function uploadFiles(files: FileList) {
     setUploading(true);
-    setError("");
     const supabase = createClient();
     const uploaded: string[] = [];
     for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const compressed = await compressImage(file);
+      if (compressed.size > 5 * 1024 * 1024) {
+        toast(`${file.name}: maior que 5 MB mesmo comprimida`, "err");
+        continue;
+      }
+      const ext = compressed.type === "image/png" ? "png" : "jpg";
       const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error: upErr } = await supabase.storage
+      const { error } = await supabase.storage
         .from("product-images")
-        .upload(path, file, { contentType: file.type });
-      if (upErr) {
-        setError(`Falha no upload de ${file.name}: ${upErr.message}`);
+        .upload(path, compressed, { contentType: compressed.type });
+      if (error) {
+        toast(`Falha no upload de ${file.name}`, "err");
         continue;
       }
       const { data } = supabase.storage.from("product-images").getPublicUrl(path);
       uploaded.push(data.publicUrl);
     }
-    setImages((prev) => [...prev, ...uploaded]);
+    if (uploaded.length) {
+      setImages((prev) => [...prev, ...uploaded]);
+      toast(`${uploaded.length} foto(s) enviada(s)`);
+    }
     setUploading(false);
-  }
-
-  function removeImage(url: string) {
-    setImages((prev) => prev.filter((u) => u !== url));
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   function moveImage(idx: number, dir: -1 | 1) {
@@ -97,22 +137,25 @@ export default function ProductForm({ product, variants, categories, collections
     });
   }
 
+  function removeImage(url: string) {
+    setImages((prev) => prev.filter((u) => u !== url));
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-
-    if (!name.trim()) return setError("Informe o nome do produto.");
-    if (!price || Number(price) <= 0) return setError("Informe um preço válido.");
-    if (promoPrice && Number(promoPrice) >= Number(price))
-      return setError("O preço promocional deve ser menor que o preço normal.");
+    const errs = validate();
+    setErrors(errs);
+    if (errs.length) {
+      toast("Corrija os erros do formulário", "err");
+      return;
+    }
 
     setSaving(true);
     const supabase = createClient();
-
     const finalSlug = slugify(slug || name);
     const payload = {
       name: name.trim(),
-      slug: isNew ? `${finalSlug}-${Math.random().toString(36).slice(2, 6)}` : (product!.slug),
+      short_description: shortDescription.trim(),
       description,
       fabric,
       size_chart: sizeChart,
@@ -120,153 +163,170 @@ export default function ProductForm({ product, variants, categories, collections
       collection_id: collectionId || null,
       price: Number(price),
       promo_price: promoPrice ? Number(promoPrice) : null,
+      main_image: images[0] || null,
+      images,
       sizes,
       colors,
-      images,
       tags,
       featured,
+      is_new: isNewFlag,
       status,
     };
 
     let productId = product?.id;
-    if (isNew) {
-      const { data, error: insErr } = await supabase
-        .from("products")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (insErr) {
-        setSaving(false);
-        return setError(`Erro ao salvar: ${insErr.message}`);
+    try {
+      if (isNew) {
+        const { data, error } = await supabase
+          .from("products")
+          .insert({ ...payload, slug: `${finalSlug}-${Math.random().toString(36).slice(2, 6)}` })
+          .select("id")
+          .single();
+        if (error) throw error;
+        productId = data.id;
+      } else {
+        const { error } = await supabase.from("products").update(payload).eq("id", product!.id);
+        if (error) throw error;
       }
-      productId = data.id;
-    } else {
-      const { error: updErr } = await supabase
-        .from("products")
-        .update(payload)
-        .eq("id", product!.id);
-      if (updErr) {
-        setSaving(false);
-        return setError(`Erro ao salvar: ${updErr.message}`);
-      }
-    }
 
-    // Sincroniza variantes (estoque por tamanho×cor)
-    const combos: { size: string; color: string; stock: number }[] = [];
-    for (const s of sizes) {
-      for (const c of colors.length ? colors : [""]) {
-        combos.push({ size: s, color: c, stock: stockOf(s, c) });
-      }
-    }
-
-    if (combos.length) {
-      const { error: varErr } = await supabase.rpc("sync_variants", {
+      // Sincroniza grade de variantes via RPC (upsert + remoção)
+      const combos = sizes.flatMap((s) =>
+        (colors.length ? colors : [""]).map((c) => ({
+          size: s,
+          color: c,
+          stock: stockOf(s, c),
+        }))
+      );
+      const { error: rpcErr } = await supabase.rpc("sync_variants", {
         p_product_id: productId,
         p_variants: combos,
       });
-      if (varErr) {
-        // Fallback: sincroniza manualmente
-        const { data: existing } = await supabase
-          .from("variants")
-          .select("id, size, color")
-          .eq("product_id", productId);
-        const existingMap = new Map(
-          (existing || []).map((v) => [`${v.size}||${v.color}`, v.id])
-        );
-        for (const c of combos) {
-          const key = stockKey(c.size, c.color);
-          const exId = existingMap.get(key);
-          if (exId) {
-            await supabase.from("variants").update({ stock: c.stock }).eq("id", exId);
-            existingMap.delete(key);
-          } else {
-            await supabase.from("variants").insert({
-              product_id: productId,
-              size: c.size,
-              color: c.color,
-              stock: c.stock,
-            });
-          }
-        }
-        // Remove variantes que não existem mais
-        for (const [, id] of existingMap) {
-          await supabase.from("variants").delete().eq("id", id);
-        }
-      }
-    }
+      if (rpcErr) throw rpcErr;
 
-    setSaving(false);
-    router.push("/admin/produtos");
-    router.refresh();
+      toast(isNew ? "Produto cadastrado!" : "Produto atualizado!");
+      router.push("/admin/produtos");
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao salvar";
+      toast(msg.includes("duplicate") ? "Slug já existe — mude o nome." : msg, "err");
+      setSaving(false);
+    }
   }
 
   return (
     <form onSubmit={save}>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl">{isNew ? "Novo produto" : "Editar produto"}</h1>
-          {totalStock <= 0 && !isNew && (
-            <p className="mt-1 text-xs text-red-600">
-              Estoque total zerado — produto aparecerá como "Esgotado".
-            </p>
-          )}
+          <p className="mt-0.5 text-sm text-gray-500">
+            Estoque total: <strong>{totalStock}</strong> · {sizes.length} tamanho(s) ×{" "}
+            {colors.length} cor(es)
+          </p>
         </div>
         <div className="flex gap-2">
           <Link href="/admin/produtos" className="a-btn secondary">Cancelar</Link>
           <button type="submit" disabled={saving || uploading} className="a-btn">
-            {saving ? "Salvando…" : "Salvar produto"}
+            {saving ? <><Spinner /> Salvando…</> : "Salvar produto"}
           </button>
         </div>
       </div>
 
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      {errors.length > 0 && (
+        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+          <ul className="list-inside list-disc space-y-1">
+            {errors.map((e) => <li key={e}>{e}</li>)}
+          </ul>
+        </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* Coluna principal */}
+        {/* ===== Coluna principal ===== */}
         <div className="space-y-4 lg:col-span-2">
-          <div className="a-card space-y-4">
+          {/* Informações gerais */}
+          <fieldset className="a-card space-y-4">
+            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+              Informações gerais
+            </legend>
             <div>
-              <label>Nome do produto *</label>
+              <label htmlFor="p-name">Nome do produto *</label>
               <input
+                id="p-name"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
-                  if (isNew) setSlug(e.target.value);
+                  if (autoSlug) setSlug(e.target.value);
                 }}
                 placeholder="Ex.: Conjunto Marrom"
               />
+              {!isNew && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Slug: /produto/{slugify(slug || name)} (URL amigável)
+                </p>
+              )}
             </div>
             <div>
-              <label>Descrição</label>
+              <label htmlFor="p-short">Descrição curta (cartões e compartilhamento)</label>
+              <input
+                id="p-short"
+                value={shortDescription}
+                onChange={(e) => setShortDescription(e.target.value)}
+                maxLength={120}
+                placeholder="Uma linha que resume a peça"
+              />
+              <p className="mt-1 text-right text-xs text-gray-400">{shortDescription.length}/120</p>
+            </div>
+            <div>
+              <label htmlFor="p-desc">Descrição completa</label>
               <textarea
+                id="p-desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
-                placeholder="Descreva o caimento, modelagem e detalhes da peça…"
+                placeholder="Caimento, modelagem e detalhes…"
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label>Tecido / material</label>
-                <input value={fabric} onChange={(e) => setFabric(e.target.value)} />
+                <label htmlFor="p-fabric">Tecido / material</label>
+                <input id="p-fabric" value={fabric} onChange={(e) => setFabric(e.target.value)} />
               </div>
               <div>
-                <label>Tabela de medidas (opcional)</label>
+                <label htmlFor="p-chart">Tabela de medidas</label>
                 <input
+                  id="p-chart"
                   value={sizeChart}
                   onChange={(e) => setSizeChart(e.target.value)}
-                  placeholder="Ex.: Model veste P — busto 84 cm"
+                  placeholder="Ex.: Model veste P"
                 />
               </div>
             </div>
-          </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="p-cat">Categoria</label>
+                <select id="p-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">— Sem categoria —</option>
+                  {categories.filter((c) => c.active).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="p-col">Coleção</label>
+                <select id="p-col" value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
+                  <option value="">— Sem coleção —</option>
+                  {collections.filter((c) => c.active).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </fieldset>
 
           {/* Imagens */}
-          <div className="a-card">
-            <label>Fotos do produto</label>
-            <div className="mt-2 flex flex-wrap gap-3">
+          <fieldset className="a-card">
+            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+              Fotos ({images.length}) — a primeira é a capa
+            </legend>
+            <div className="flex flex-wrap gap-3">
               {images.map((url, i) => (
                 <div key={url} className="relative">
                   <div className="relative h-28 w-24 overflow-hidden rounded-lg border border-gray-200">
@@ -277,60 +337,60 @@ export default function ProductForm({ product, variants, categories, collections
                       Capa
                     </span>
                   )}
-                  <div className="mt-1 flex justify-center gap-1">
-                    <button type="button" onClick={() => moveImage(i, -1)} className="text-xs text-gray-500 hover:text-gray-800" aria-label="Mover esquerda">←</button>
-                    <button type="button" onClick={() => removeImage(url)} className="text-xs text-red-500 hover:text-red-700" aria-label="Remover foto">✕</button>
-                    <button type="button" onClick={() => moveImage(i, 1)} className="text-xs text-gray-500 hover:text-gray-800" aria-label="Mover direita">→</button>
+                  <div className="mt-1 flex justify-center gap-2">
+                    <button type="button" onClick={() => moveImage(i, -1)} className="text-xs text-gray-500 hover:text-gray-800" aria-label="Mover para esquerda">←</button>
+                    <button type="button" onClick={() => removeImage(url)} className="text-xs text-red-500 hover:text-red-700" aria-label={`Remover foto ${i + 1}`}>✕</button>
+                    <button type="button" onClick={() => moveImage(i, 1)} className="text-xs text-gray-500 hover:text-gray-800" aria-label="Mover para direita">→</button>
                   </div>
                 </div>
               ))}
               <label className="flex h-28 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 text-xs text-gray-500 hover:border-[var(--a-accent)] hover:text-[var(--a-accent)]">
-                {uploading ? "Enviando…" : "+ Foto"}
+                {uploading ? <Spinner /> : "+ Foto"}
                 <input
+                  ref={fileRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   multiple
                   className="hidden"
-                  onChange={(e) => e.target.files && uploadFiles(e.target.files)}
+                  onChange={(e) => e.target.files?.length && uploadFiles(e.target.files)}
                 />
               </label>
             </div>
             <p className="mt-2 text-xs text-gray-400">
-              A primeira foto é a capa. JPG ou PNG, até 5 MB por foto.
+              JPG/PNG/WebP até 5 MB — comprimimos automaticamente para carregar rápido.
             </p>
-          </div>
+          </fieldset>
 
-          {/* Estoque */}
-          <div className="a-card">
-            <div className="mb-3 flex items-center justify-between">
-              <label style={{ marginBottom: 0 }}>Estoque por tamanho × cor</label>
-              <span className="text-sm font-semibold">Total: {totalStock}</span>
-            </div>
-            {sizes.length && colors.length ? (
+          {/* Variantes — matriz cor × tamanho */}
+          <fieldset className="a-card">
+            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+              Estoque por cor × tamanho
+            </legend>
+            {sizes.length > 0 && colors.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-gray-500">
-                      <th className="pb-2 pr-4">Tamanho</th>
-                      {colors.map((c) => (
-                        <th key={c} className="pb-2 pr-4">{c}</th>
+                      <th className="pb-2 pr-4">Cor \\ Tamanho</th>
+                      {sizes.map((s) => (
+                        <th key={s} className="pb-2 pr-3">{s}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {sizes.map((s) => (
-                      <tr key={s}>
-                        <td className="py-1.5 pr-4 font-medium">{s}</td>
-                        {colors.map((c) => (
-                          <td key={c} className="py-1.5 pr-4">
+                    {colors.map((c) => (
+                      <tr key={c}>
+                        <td className="py-1.5 pr-4 font-medium">{c}</td>
+                        {sizes.map((s) => (
+                          <td key={s} className="py-1.5 pr-3">
                             <input
                               type="number"
                               min={0}
+                              inputMode="numeric"
                               value={stockOf(s, c)}
-                              onChange={(e) =>
-                                setStockOf(s, c, Math.max(0, Number(e.target.value) || 0))
-                              }
-                              style={{ width: 80 }}
+                              onChange={(e) => setStockOf(s, c, Number(e.target.value))}
+                              style={{ width: 72 }}
+                              aria-label={`Estoque de ${c} tamanho ${s}`}
                             />
                           </td>
                         ))}
@@ -340,79 +400,77 @@ export default function ProductForm({ product, variants, categories, collections
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">
-                Defina tamanhos e cores para lançar o estoque.
-              </p>
+              <p className="text-sm text-gray-500">Defina tamanhos e cores ao lado para gerar a matriz.</p>
             )}
-          </div>
+          </fieldset>
         </div>
 
-        {/* Coluna lateral */}
+        {/* ===== Coluna lateral ===== */}
         <div className="space-y-4">
-          <div className="a-card space-y-4">
+          {/* Preço */}
+          <fieldset className="a-card space-y-4">
+            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Preço</legend>
             <div>
-              <label>Preço (R$) *</label>
+              <label htmlFor="p-price">Preço normal (R$) *</label>
               <input
+                id="p-price"
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
+                inputMode="decimal"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="189.90"
               />
             </div>
             <div>
-              <label>Preço promocional (opcional)</label>
+              <label htmlFor="p-promo">Preço promocional (opcional)</label>
               <input
+                id="p-promo"
                 type="number"
                 step="0.01"
                 min="0"
+                inputMode="decimal"
                 value={promoPrice}
                 onChange={(e) => setPromoPrice(e.target.value)}
                 placeholder="149.90"
+                aria-invalid={promoInvalid}
               />
+              {promoInvalid && (
+                <p className="mt-1 text-xs text-red-600">Deve ser menor que o preço normal.</p>
+              )}
+              {hasDiscount && (
+                <p className="mt-1 text-xs font-semibold text-green-700">
+                  Desconto de {discountPct}% ativo — aparece em destaque na loja.
+                </p>
+              )}
             </div>
+          </fieldset>
+
+          {/* Status */}
+          <fieldset className="a-card space-y-4">
+            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Publicação</legend>
             <div>
-              <label>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}>
+              <label htmlFor="p-status">Status</label>
+              <select id="p-status" value={status} onChange={(e) => setStatus(e.target.value as Product["status"])}>
                 <option value="active">Ativo (visível na loja)</option>
                 <option value="draft">Rascunho (oculto)</option>
                 <option value="inactive">Inativo</option>
               </select>
             </div>
-            <label style={{ display: "flex", gap: 8, alignItems: "center", textTransform: "none", fontSize: 14 }}>
-              <input
-                type="checkbox"
-                checked={featured}
-                onChange={(e) => setFeatured(e.target.checked)}
-                style={{ width: 16 }}
-              />
+            <label className="flex items-center gap-2 text-sm font-normal normal-case tracking-normal">
+              <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} style={{ width: 16 }} />
               Destacar na Home ("Destaques")
             </label>
-          </div>
+            <label className="flex items-center gap-2 text-sm font-normal normal-case tracking-normal">
+              <input type="checkbox" checked={isNewFlag} onChange={(e) => setIsNewFlag(e.target.checked)} style={{ width: 16 }} />
+              Marcar como "Novidade"
+            </label>
+          </fieldset>
 
-          <div className="a-card space-y-4">
-            <div>
-              <label>Categoria</label>
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">— Sem categoria —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label>Coleção</label>
-              <select value={collectionId} onChange={(e) => setCollectionId(e.target.value)}>
-                <option value="">— Sem coleção —</option>
-                {collections.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="a-card space-y-4">
+          {/* Grade */}
+          <fieldset className="a-card space-y-4">
+            <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Tamanhos, cores e tags</legend>
             <div>
               <label>Tamanhos</label>
               <div className="flex flex-wrap gap-2">
@@ -420,23 +478,18 @@ export default function ProductForm({ product, variants, categories, collections
                   <button
                     key={s}
                     type="button"
-                    onClick={() =>
-                      setSizes((prev) =>
-                        prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-                      )
-                    }
+                    onClick={() => setSizes((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])}
                     className={`rounded-full border px-3.5 py-1.5 text-sm ${
-                      sizes.includes(s)
-                        ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white"
-                        : "border-gray-300 text-gray-600"
+                      sizes.includes(s) ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white" : "border-gray-300 text-gray-600"
                     }`}
+                    aria-pressed={sizes.includes(s)}
                   >
                     {s}
                   </button>
                 ))}
               </div>
               <input
-                value=""
+                aria-label="Tamanho personalizado"
                 placeholder="+ tamanho personalizado (Enter)"
                 onKeyDown={(e) => {
                   const v = (e.target as HTMLInputElement).value.trim().toUpperCase();
@@ -467,7 +520,7 @@ export default function ProductForm({ product, variants, categories, collections
                 ))}
               </div>
               <input
-                value=""
+                aria-label="Nova cor"
                 placeholder="+ cor (Enter)"
                 onKeyDown={(e) => {
                   const v = (e.target as HTMLInputElement).value.trim();
@@ -487,23 +540,18 @@ export default function ProductForm({ product, variants, categories, collections
                   <button
                     key={t}
                     type="button"
-                    onClick={() =>
-                      setTags((prev) =>
-                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-                      )
-                    }
+                    onClick={() => setTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}
                     className={`rounded-full border px-3.5 py-1.5 text-sm capitalize ${
-                      tags.includes(t)
-                        ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white"
-                        : "border-gray-300 text-gray-600"
+                      tags.includes(t) ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white" : "border-gray-300 text-gray-600"
                     }`}
+                    aria-pressed={tags.includes(t)}
                   >
                     {t === "promocao" ? "promoção" : t}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
+          </fieldset>
         </div>
       </div>
     </form>

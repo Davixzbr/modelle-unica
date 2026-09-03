@@ -9,20 +9,24 @@ export type SiteConfig = {
   instagramHandle: string;
   address: string;
   email: string;
+  hours: string;
+  low_stock: number;
 };
 
 const FALLBACK: SiteConfig = {
   name: "Modelle Única",
   tagline: "Esteja sempre em movimento.",
-  whatsapp: "5563992678729",
-  whatsappDisplay: "+55 63 99267-8729",
+  whatsapp: "556392678729",
+  whatsappDisplay: "+55 63 9267-8729",
   instagram: "https://www.instagram.com/modelle_unica/",
   instagramHandle: "@modelle_unica",
   address: "",
   email: "",
+  hours: "",
+  low_stock: 2,
 };
 
-/** Lê as configurações do site do banco (com fallback). */
+/** Lê as configurações do site do banco (com fallback). Cache curto por request. */
 export async function getSiteConfig(): Promise<SiteConfig> {
   try {
     const supabase = await createClient();

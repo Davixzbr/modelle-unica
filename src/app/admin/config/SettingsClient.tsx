@@ -98,6 +98,26 @@ export default function SettingsClient({
             <label>E-mail (opcional)</label>
             <input {...bind("email")} />
           </div>
+          <div>
+            <label>Horário de atendimento (opcional)</label>
+            <input {...bind("hours")} placeholder="Seg–Sáb, 8h às 18h" />
+          </div>
+          <div>
+            <label htmlFor="low-stock">Limite de "estoque baixo" (unidades)</label>
+            <input
+              id="low-stock"
+              type="number"
+              min={1}
+              max={20}
+              value={siteForm.low_stock}
+              onChange={(e) =>
+                setSiteForm((prev) => ({ ...prev, low_stock: Math.max(1, Number(e.target.value) || 2) }))
+              }
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Produtos com até este total aparecem como "Últimas peças" na loja.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-4">

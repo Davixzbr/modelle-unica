@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
+import { getActiveBanners, getShowcaseProducts } from "@/lib/queries";
 import HeroCarousel from "@/components/HeroCarousel";
 import ProductCard from "@/components/ProductCard";
 import Reveal from "@/components/Reveal";
 import { getSetting, getSiteConfig } from "@/lib/site-config";
-import type { Banner, Product } from "@/lib/types";
+import { PRODUCT_SELECT } from "@/lib/types";
+import type { Product, Categorie } from "@/lib/types";
 import Image from "next/image";
 
 export const revalidate = 60;
@@ -14,21 +16,21 @@ export default async function HomePage() {
   const site = await getSiteConfig();
   const about = await getSetting("about");
 
-  const [{ data: banners }, { data: novos }, { data: destaques }, { data: cats }] =
-    await Promise.all([
-      supabase.from("banners").select("*").eq("active", true).order("sort_order"),
-      supabase
+  const [banners, novos, destaques, { data: cats }] = await Promise.all([
+    getActiveBanners(),
+    getShowcaseProducts({ column: "created_at", ascending: false }, 4),
+    getShowcaseProducts({ column: "views", ascending: false }, 4).then(async (fallback) => {
+      const supabase = await createClient();
+      const { data } = await supabase
         .from("products")
-        .select("*, categories(name, slug), variant_stocks(total_stock)")
-        .order("created_at", { ascending: false })
-        .limit(4),
-      supabase
-        .from("products")
-        .select("*, categories(name, slug), variant_stocks(total_stock)")
+        .select(PRODUCT_SELECT)
+        .eq("status", "active")
         .eq("featured", true)
-        .limit(4),
-      supabase.from("categories").select("*").order("sort_order"),
-    ]);
+        .limit(4);
+      return ((data as Product[])?.length ? (data as Product[]) : fallback) || [];
+    }),
+    supabase.from("categories").select("*").eq("active", true).order("sort_order"),
+  ]);
 
   const catImages: Record<string, string> = {
     conjuntos: "/images/look-002.jpg",
@@ -38,7 +40,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HeroCarousel banners={(banners as Banner[]) || []} />
+      <HeroCarousel banners={banners} />
 
       {/* ---------- NOVIDADES ---------- */}
       <section className="mx-auto max-w-6xl px-4 py-20">
@@ -54,9 +56,9 @@ export default async function HomePage() {
             Ver tudo
           </Link>
         </Reveal>
-        <Reveal className="grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
-          {(novos as Product[])?.map((p) => (
-            <ProductCard key={p.id} p={p} />
+        <Reveal className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 lg:grid-cols-4">
+          {novos.map((p) => (
+            <ProductCard key={p.id} p={p} lowStock={site.low_stock} />
           ))}
         </Reveal>
       </section>
@@ -71,22 +73,25 @@ export default async function HomePage() {
             </h2>
           </Reveal>
           <Reveal className="grid gap-5 sm:grid-cols-3">
-            {cats?.map((c) => (
+            {(cats as Categorie[])?.map((c) => (
               <Link
                 key={c.id}
                 href={`/catalogo?cat=${c.slug}`}
                 className="zoom-frame group relative aspect-[4/5] overflow-hidden"
               >
                 <Image
-                  src={catImages[c.slug] || "/images/look-001.jpg"}
+                  src={c.image_url || catImages[c.slug] || "/images/look-001.jpg"}
                   alt={c.name}
                   fill
                   sizes="(max-width: 640px) 100vw, 33vw"
                   className="object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-ink/70 to-transparent" />
-                <div className="absolute bottom-5 left-5">
+                <div className="absolute bottom-5 left-5 right-5">
                   <p className="font-display text-2xl text-cream">{c.name}</p>
+                  {c.description && (
+                    <p className="mt-1 hidden text-xs text-cream/70 group-hover:block">{c.description}</p>
+                  )}
                   <p className="mt-1 text-[11px] uppercase tracking-widest text-cream/70">
                     Descobrir →
                   </p>
@@ -103,9 +108,9 @@ export default async function HomePage() {
           <p className="text-[11px] uppercase tracking-[0.3em] text-caramel">Curadoria da casa</p>
           <h2 className="font-display mt-2 text-3xl text-ink sm:text-4xl">Destaques</h2>
         </Reveal>
-        <Reveal className="grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
-          {(destaques as Product[])?.map((p) => (
-            <ProductCard key={p.id} p={p} />
+        <Reveal className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 lg:grid-cols-4">
+          {destaques.map((p) => (
+            <ProductCard key={p.id} p={p} lowStock={site.low_stock} />
           ))}
         </Reveal>
       </section>
@@ -145,7 +150,7 @@ export default async function HomePage() {
       <section className="mx-auto max-w-6xl px-4 py-20 text-center">
         <Reveal>
           <p className="text-[11px] uppercase tracking-[0.3em] text-caramel">
-            @{site.instagramHandle.replace("@", "")}
+            {site.instagramHandle.replace("@", "")}
           </p>
           <h2 className="font-display mt-2 text-3xl text-ink sm:text-4xl">
             Siga-nos no Instagram
@@ -159,7 +164,7 @@ export default async function HomePage() {
             rel="noopener noreferrer"
             className="mt-8 inline-block rounded-full bg-ink px-10 py-3.5 text-[12px] font-semibold uppercase tracking-widest text-cream transition-all hover:bg-caramel"
           >
-            Seguir @modelle_unica
+            Seguir {site.instagramHandle}
           </a>
         </Reveal>
       </section>

@@ -53,6 +53,13 @@ export default async function ContatoPage() {
               <p className="font-display mt-1 text-2xl text-ink">{site.address}</p>
             </div>
           )}
+
+          {site.hours && (
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-ink-soft">Horário de atendimento</p>
+              <p className="font-display mt-1 text-2xl text-ink">{site.hours}</p>
+            </div>
+          )}
         </div>
 
         <div>
