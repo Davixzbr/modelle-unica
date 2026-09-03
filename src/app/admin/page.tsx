@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { getSiteConfig } from "@/lib/site-config";
-import { PRODUCT_SELECT } from "@/lib/types";
 import type { Product, ShopEvent } from "@/lib/types";
 
 export const dynamic = "force-dynamic";

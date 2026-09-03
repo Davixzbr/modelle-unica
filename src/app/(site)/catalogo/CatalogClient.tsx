@@ -100,7 +100,7 @@ export default function CatalogClient({
     if (size) list = list.filter((p) => p.sizes.includes(size));
     if (color) list = list.filter((p) => p.colors.includes(color));
     if (maxPrice > 0) list = list.filter((p) => (p.promo_price ?? p.price) <= maxPrice);
-    if (inStock) list = list.filter((p) => (p.variant_stocks?.[0]?.total_stock ?? 0) > 0);
+    if (inStock) list = list.filter((p) => (p.total_stock) > 0);
     if (q.trim()) {
       const needle = q.toLowerCase();
       list = list.filter(

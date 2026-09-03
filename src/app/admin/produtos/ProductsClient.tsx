@@ -10,7 +10,7 @@ import { toast } from "@/components/Toast";
 import { Spinner } from "@/components/States";
 import type { Product } from "@/lib/types";
 
-type Row = Product & { variant_stocks?: { total_stock: number }[] };
+type Row = Product;
 
 const STATUS_BADGE: Record<string, string> = { active: "green", draft: "amber", inactive: "gray" };
 const STATUS_LABEL: Record<string, string> = { active: "Ativo", draft: "Rascunho", inactive: "Inativo" };
@@ -29,10 +29,10 @@ export default function ProductsClient({ initial, lowStock }: { initial: Row[]; 
   const filtered = useMemo(() => {
     let list = [...products];
     if (statusFilter) list = list.filter((p) => p.status === statusFilter);
-    if (stockFilter === "out") list = list.filter((p) => (p.variant_stocks?.[0]?.total_stock ?? 0) <= 0);
+    if (stockFilter === "out") list = list.filter((p) => (p.total_stock) <= 0);
     if (stockFilter === "low")
       list = list.filter((p) => {
-        const t = p.variant_stocks?.[0]?.total_stock ?? 0;
+        const t = p.total_stock;
         return t > 0 && t <= lowStock;
       });
     if (q.trim()) {
@@ -178,7 +178,7 @@ export default function ProductsClient({ initial, lowStock }: { initial: Row[]; 
         </thead>
         <tbody>
           {filtered.map((p) => {
-            const total = p.variant_stocks?.[0]?.total_stock ?? 0;
+            const total = p.total_stock;
             return (
               <tr key={p.id}>
                 <td>

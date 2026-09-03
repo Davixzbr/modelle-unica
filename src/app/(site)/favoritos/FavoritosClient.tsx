@@ -19,15 +19,16 @@ export default function FavoritosClient({ lowStock }: { lowStock: number }) {
       return;
     }
     createClient()
-      .from("products")
-      .select("*, categories(name, slug), variant_stocks(total_stock)")
-      .in("id", ids)
-      .eq("status", "active")
+      .rpc("products_with_stock", {
+        p_order: "sort_order",
+        p_asc: true,
+        p_limit: 500,
+        p_slug: null,
+      })
       .then(({ data }) => {
-        // Mantém a ordem em que o usuário favoritou
-        const rows = (data as Product[]) || [];
-        rows.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
-        setProducts(rows);
+        const all = (data as unknown as Product[]) || [];
+        const map = new Map(all.map((p) => [p.id, p]));
+        setProducts(ids.map((id) => map.get(id)).filter(Boolean) as Product[]);
       });
   }, [ids, ready]);
 

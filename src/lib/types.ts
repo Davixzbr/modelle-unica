@@ -42,9 +42,9 @@ export type Product = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  total_stock: number;
   categories?: { name: string; slug: string } | null;
   collections?: { name: string; slug: string; period_text?: string } | null;
-  variant_stocks?: { total_stock: number }[];
 };
 export type Banner = {
   id: string;
@@ -77,5 +77,3 @@ export type ShopEvent = {
   created_at: string;
 };
 
-/** Select com join de categoria/coleção + estoque agregado. */
-export const PRODUCT_SELECT = "*, categories(name, slug), collections(name, slug, period_text), variant_stocks(total_stock)" as const;

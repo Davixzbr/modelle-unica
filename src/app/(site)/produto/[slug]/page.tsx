@@ -3,39 +3,30 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { getSiteConfig } from "@/lib/site-config";
+import { getProductBySlug } from "@/lib/queries";
 import { logEvent } from "@/lib/analytics";
 import ProductDetail from "./ProductDetail";
 import ProductCard from "@/components/ProductCard";
-import { PRODUCT_SELECT, type Product, type Variant } from "@/lib/types";
+import type { Product, Variant } from "@/lib/types";
 import { SITE_URL } from "@/lib/env";
 
 export const revalidate = 60;
 
 type Params = { params: Promise<{ slug: string }> };
 
-async function getProduct(slug: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("slug", slug)
-    .eq("status", "active")
-    .maybeSingle();
-  return data as Product | null;
-}
-
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
-  const p = await getProduct(slug);
+  const p = await getProductBySlug(slug);
   if (!p) return { title: "Produto não encontrado" };
   const image = p.main_image || p.images[0];
+  const description = p.short_description || p.description.slice(0, 160);
   return {
     title: p.name,
-    description: p.short_description || p.description.slice(0, 160),
+    description,
     alternates: { canonical: `${SITE_URL}/produto/${p.slug}` },
     openGraph: {
       title: `${p.name} · Modelle Única`,
-      description: p.short_description || p.description.slice(0, 160),
+      description,
       images: image ? [{ url: image }] : undefined,
       type: "website",
     },
@@ -44,7 +35,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function ProdutoPage({ params }: Params) {
   const { slug } = await params;
-  const p = await getProduct(slug);
+  const p = await getProductBySlug(slug);
   if (!p) notFound();
 
   const supabase = await createClient();
@@ -52,13 +43,7 @@ export default async function ProdutoPage({ params }: Params) {
 
   const [{ data: variants }, { data: related }] = await Promise.all([
     supabase.from("variants").select("*").eq("product_id", p.id),
-    supabase
-      .from("products")
-      .select(PRODUCT_SELECT)
-      .eq("status", "active")
-      .neq("id", p.id)
-      .order("sort_order")
-      .limit(4),
+    supabase.from("products").select("*").eq("status", "active").neq("id", p.id).order("sort_order").limit(4),
   ]);
 
   // Evento de visualização + contador (fire-and-forget)
@@ -79,9 +64,8 @@ export default async function ProdutoPage({ params }: Params) {
       "@type": "Offer",
       price: p.promo_price ?? p.price,
       priceCurrency: "BRL",
-      availability: (p.variant_stocks?.[0]?.total_stock ?? 0) > 0
-        ? "https://schema.org/InStock"
-        : "https://schema.org/OutOfStock",
+      availability:
+        p.total_stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       url: `${SITE_URL}/produto/${p.slug}`,
     },
   };
@@ -117,8 +101,8 @@ export default async function ProdutoPage({ params }: Params) {
       {/* Relacionados */}
       <section className="mx-auto max-w-6xl px-4 py-16">
         <h2 className="font-display mb-8 text-2xl text-ink">Combine com</h2>
-        <div className="grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
-          {(related as Product[])?.map((r) => (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 lg:grid-cols-4">
+          {((related as Product[]) || []).map((r) => (
             <ProductCard key={r.id} p={r} lowStock={site.low_stock} />
           ))}
         </div>

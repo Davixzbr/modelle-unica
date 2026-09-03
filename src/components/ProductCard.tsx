@@ -26,7 +26,7 @@ export function StockBadge({ stock, low }: { stock: number; low: number }) {
 }
 
 export default function ProductCard({ p, lowStock = 2 }: { p: Product; lowStock?: number }) {
-  const total = p.variant_stocks?.[0]?.total_stock ?? 0;
+  const total = p.total_stock;
   const hasPromo = p.promo_price != null && p.promo_price < p.price;
   const soldOut = total <= 0;
 

@@ -5,8 +5,7 @@ import HeroCarousel from "@/components/HeroCarousel";
 import ProductCard from "@/components/ProductCard";
 import Reveal from "@/components/Reveal";
 import { getSetting, getSiteConfig } from "@/lib/site-config";
-import { PRODUCT_SELECT } from "@/lib/types";
-import type { Product, Categorie } from "@/lib/types";
+import type { Categorie } from "@/lib/types";
 import Image from "next/image";
 
 export const revalidate = 60;
@@ -16,21 +15,26 @@ export default async function HomePage() {
   const site = await getSiteConfig();
   const about = await getSetting("about");
 
-  const [banners, novos, destaques, { data: cats }] = await Promise.all([
+  const [banners, novos, favoritos, destaquesFallback, { data: cats }] = await Promise.all([
     getActiveBanners(),
     getShowcaseProducts({ column: "created_at", ascending: false }, 4),
-    getShowcaseProducts({ column: "views", ascending: false }, 4).then(async (fallback) => {
-      const supabase = await createClient();
-      const { data } = await supabase
-        .from("products")
-        .select(PRODUCT_SELECT)
-        .eq("status", "active")
-        .eq("featured", true)
-        .limit(4);
-      return ((data as Product[])?.length ? (data as Product[]) : fallback) || [];
-    }),
+    getShowcaseProducts({ column: "favorites_count", ascending: false }, 4),
+    getShowcaseProducts({ column: "views", ascending: false }, 4),
     supabase.from("categories").select("*").eq("active", true).order("sort_order"),
   ]);
+
+  // Destaques: escolhidos pelo admin (featured=true, já filtrados pela RLS) com fallback p/ mais vistos
+  const supabase2 = await createClient();
+  const { data: featuredRows } = await supabase2
+    .from("products")
+    .select("*")
+    .eq("status", "active")
+    .eq("featured", true)
+    .order("sort_order")
+    .limit(4);
+  const destaques = (featuredRows as (typeof featuredRows & { total_stock?: number })[])?.length
+    ? featuredRows
+    : destaquesFallback;
 
   const catImages: Record<string, string> = {
     conjuntos: "/images/look-002.jpg",
@@ -109,7 +113,7 @@ export default async function HomePage() {
           <h2 className="font-display mt-2 text-3xl text-ink sm:text-4xl">Destaques</h2>
         </Reveal>
         <Reveal className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-5 lg:grid-cols-4">
-          {destaques.map((p) => (
+          {(destaques || []).map((p) => (
             <ProductCard key={p.id} p={p} lowStock={site.low_stock} />
           ))}
         </Reveal>
